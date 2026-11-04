@@ -34,3 +34,15 @@ POST {{baseUrl}}/api/generate
 Content-Type: application/json
 
 {"model":"qwen3:4b","prompt":" "}
+
+### Benchmark dataset
+GET {{baseUrl}}/api/benchmarks/dataset
+
+### Local benchmark (ten model calls; can take several minutes)
+POST {{baseUrl}}/api/benchmarks
+Content-Type: application/json
+
+{"datasetId":"basics","models":["qwen3:4b"]}
+
+### Saved benchmark (replace the UUID with the POST result's id)
+GET {{baseUrl}}/api/benchmarks/00000000-0000-0000-0000-000000000000

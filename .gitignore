@@ -8,3 +8,4 @@
 .env.*
 !.env.example
 *.log
+/benchmark-report.json

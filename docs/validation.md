@@ -97,3 +97,14 @@ IDs, model IDs, statuses, and durations without keys or response text. The stack
 is stopped afterward and its database volume is preserved. No tag or push is
 performed. Create `v0.1.0` only after real-service checks and CI pass for the
 release commit.
+
+## Milestone 7 implementation checks
+
+The benchmark feature adds a versioned ten-task dataset, deterministic objective
+scoring rules, per-model summaries, and persistent JSON reports. A full Java 21
+`mvn clean verify` passed with 28 unit/HTTP tests and 2 PostgreSQL integration
+tests during development. V1-to-V2 migration, preservation of existing history,
+partial model failure, execution-ID correlation, and report retrieval after
+restart were verified against actual PostgreSQL containers. AI responses for
+these checks were simulated; no real ten-task benchmark scores are claimed.
+See `docs/benchmarks.md` for scoring semantics, limits, and run/export examples.

@@ -13,6 +13,14 @@ import vn.alfha.modelhub.service.GenerationService.UnknownModelException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    @ExceptionHandler(vn.alfha.modelhub.service.BenchmarkService.BusyException.class)
+    public ResponseEntity<ApiError> benchmarkBusy() {
+        return ResponseEntity.status(429).body(new ApiError("BENCHMARK_BUSY", "A benchmark is already running; try later"));
+    }
+    @ExceptionHandler(vn.alfha.modelhub.service.BenchmarkService.MissingException.class)
+    public ResponseEntity<ApiError> benchmarkMissing() {
+        return ResponseEntity.status(404).body(new ApiError("NOT_FOUND", "Benchmark report does not exist"));
+    }
     @ExceptionHandler({IllegalArgumentException.class, HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
     public ResponseEntity<ApiError> invalid(Exception exception) {
         return ResponseEntity.badRequest().body(new ApiError("INVALID_INPUT", "Check model selection, prompt (1 to 32000 characters), and pagination (page >= 0, size 1 to 100); comparison requires two distinct models"));

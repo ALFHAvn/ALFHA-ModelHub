@@ -3,13 +3,15 @@
 Java backend for a future multi-model AI orchestration and evaluation platform.
 This repository is independent of ALFHA Agent.
 
-## Current scope: Milestone 6
+## Current scope: Milestone 7
 
 Implemented: Spring Boot application, JSON health endpoint, Java 21 Maven build,
 Ollama and optional OpenRouter providers, model listing, generation, concurrent comparison,
 PostgreSQL execution history with Flyway migrations, and automated tests.
 Docker Compose and GitHub Actions are included. Real Ollama/OpenRouter generation,
 comparison, and saved history have been verified; see `docs/validation.md` for evidence.
+Milestone 7 adds a ten-task objective benchmark, saved reports, and per-model
+summaries. See [benchmark usage and scoring](docs/benchmarks.md).
 
 ## Prerequisites
 
@@ -396,3 +398,25 @@ publicly without access controls. No model quality ranking is performed.
 
 All six implementation milestones are present. Use `docs/validation.md` to see
 what was verified locally and what still needs real-service or GitHub validation.
+
+## Objective benchmarks
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/api/benchmarks/dataset` | Inspect the bundled ten-task dataset and rules |
+| POST | `/api/benchmarks` | Execute the dataset against one or two fixed configured models |
+| GET | `/api/benchmarks/{id}` | Retrieve a saved report |
+
+```powershell
+$body = @{ datasetId = 'basics'; models = @('qwen3:4b') } | ConvertTo-Json
+$report = Invoke-RestMethod http://localhost:8080/api/benchmarks -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 1800
+$report.summaries | Format-Table
+$report | ConvertTo-Json -Depth 30 | Set-Content benchmark-report.json
+```
+
+One local model is enough to start. To compare providers, configure a specific
+available OpenRouter `vendor/model:free` ID and include it as the second model.
+`openrouter/free` is rejected for benchmarks because it can change the selected
+model across calls. Do not change your key or enable paid models for this feature.
+Automated benchmark tests use simulated AI responses and real PostgreSQL; no real
+ten-task benchmark has been claimed as completed.
