@@ -3,20 +3,22 @@
 Java backend for a future multi-model AI orchestration and evaluation platform.
 This repository is independent of ALFHA Agent.
 
-## Current scope: Milestone 4
+## Current scope: Milestone 5
 
 Implemented: Spring Boot application, JSON health endpoint, Java 21 Maven build,
 Ollama and optional OpenRouter providers, model listing, generation, concurrent comparison,
-and automated tests. PostgreSQL,
-Docker Compose, and CI belong to later milestones and are not implemented yet.
+PostgreSQL execution history with Flyway migrations, and automated tests.
+Docker Compose and CI belong to Milestone 6 and are not implemented yet.
 
 ## Prerequisites
 
 - JDK 21 (`JAVA_HOME` must point to the JDK directory).
 - Apache Maven 3.6.3 or newer (verified locally with 3.9.12).
 - Internet access for the initial Maven dependency download.
+- PostgreSQL for running the application (tested with PostgreSQL 17).
+- Docker running Linux containers for the Testcontainers integration test.
 
-No database, Ollama instance, cloud account, or API key is needed for Milestone 1.
+The current application requires a database at startup. Cloud access remains optional.
 Spring Boot is pinned to 4.1.2; Java compilation targets release 21.
 
 Check your environment:
@@ -53,15 +55,21 @@ To keep Maven's dependency cache inside this checkout (as used during setup):
 mvn "-Dmaven.repo.local=.m2/repository" --batch-mode --no-transfer-progress clean verify
 ```
 
-The JUnit 5 test starts the real Spring application on a random port, sends an
-HTTP request, verifies HTTP 200, JSON content type, and the exact response fields,
-then closes the application. It uses no mocks or external services.
+`mvn test` runs infrastructure-free unit and HTTP tests. The test-only default
+configuration disables history storage and datasource/Flyway auto-configuration.
+`mvn verify` also runs `HistoryIT` using a disposable PostgreSQL Testcontainer;
+it requires Docker and may download PostgreSQL and the Testcontainers helper image.
+Database tests fail rather than silently skip when Docker is unavailable.
+AI providers in automated tests are fake providers or loopback HTTP stubs.
 JUnit 5 is explicitly selected to meet the project requirements. Because Spring
 Framework 7's JUnit extension requires JUnit 6, the test manages the application
 context directly rather than using `@SpringBootTest`.
-Reports are written to `target/surefire-reports`.
+Reports are written to `target/surefire-reports` and `target/failsafe-reports`.
 
 ## Run
+
+First configure PostgreSQL as described under Execution history below. Flyway
+migrates the configured database on startup; the database and login must already exist.
 
 ```shell
 mvn spring-boot:run
@@ -250,5 +258,67 @@ failures, input rejection before provider calls, result ordering, and real HTTP
 requests against local Ollama/OpenRouter stubs. Real two-provider comparison has
 not been verified; no cloud calls were made during this milestone.
 
-Next: Milestone 5 — PostgreSQL execution history, database migrations, paginated
-`GET /api/runs`, and database integration tests.
+## Execution history
+
+Provide a dedicated PostgreSQL database and role with schema creation/migration
+permissions. For example, an administrator can run the following using `psql`:
+
+```sql
+CREATE ROLE modelhub LOGIN;
+\password modelhub
+CREATE DATABASE modelhub OWNER modelhub;
+```
+
+Configure the application's process environment before running it:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | `jdbc:postgresql://localhost:5432/modelhub` | JDBC connection URL |
+| `DATABASE_USER` | `modelhub` | Database login |
+| `DATABASE_PASSWORD` | empty | Set to your database role's password |
+
+Set the password through your environment/secret manager, not source files or
+committed `.env` files. The application does not automatically load `.env` files.
+Flyway owns the schema through `src/main/resources/db/migration`; no automatic
+ORM schema updates are used. The repository uses Spring JDBC parameterized SQL,
+an immutable `ExecutionRun` record, and a short transaction for pagination.
+No database transaction stays open while an AI provider is running.
+
+Every accepted generation and each comparison execution saves its UUID request ID,
+model, prompt, response, provider duration in milliseconds, status, sanitized error,
+and UTC completion timestamp. `requestId` is also returned in each generation
+result (including comparison results), allowing lookup in history. Invalid inputs
+are rejected before execution and are not recorded. Comparison results have
+independent IDs and are saved independently. No provider credentials or raw
+upstream errors are included in history records.
+
+```powershell
+Invoke-RestMethod 'http://localhost:8080/api/runs?page=0&size=20'
+```
+
+Response: `content` contains execution records with `requestId`, `model`, `prompt`,
+`response`, `durationMs`, `status`, `error`, and `timestamp`. Pagination metadata is
+`page`, `size`, `totalElements`, and `totalPages`. Page numbers start at zero;
+default size is 20 and the allowed range is 1–100. Invalid parameters return HTTP
+400. Pages past the end return empty `content`. Ordering is newest first, with
+UUID as a stable tie-breaker. Count and content share a repeatable-read snapshot;
+new records between separate page requests may still shift offset pagination.
+
+The application fails startup if the database/migrations are unavailable. For a
+database outage after startup, history reads return sanitized HTTP 503 errors.
+If saving an execution fails, generation returns HTTP 503 with `HISTORY_UNAVAILABLE`,
+`status: FAILED`, and preserves the generated text, request ID, and provider duration.
+Comparison still returns both independent results with HTTP 200. Failed saves
+are not queued or retried and do not appear in history; the returned persistence
+error takes precedence over any provider error for that result.
+
+The API currently has no authentication. History contains the prompts and model
+responses submitted by callers; use this MVP in a trusted local environment.
+
+The database integration test exercises real PostgreSQL, automatic migrations,
+successful and failed execution storage, partial comparison persistence, pagination,
+request-ID correlation, restart durability, and simulated write failure. AI responses
+remain stubbed; real cloud calls are not part of this test.
+
+Next: Milestone 6 — Docker Compose, GitHub Actions, delivery documentation, and
+MVP reliability review.

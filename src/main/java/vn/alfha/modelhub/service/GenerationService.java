@@ -9,9 +9,11 @@ import vn.alfha.modelhub.exception.ProviderException;
 @Service
 public class GenerationService {
     private final java.util.function.Function<String, ModelProvider> providers;
+    private HistoryService history;
     @Autowired
-    public GenerationService(ModelRegistry registry) {
+    public GenerationService(ModelRegistry registry, HistoryService history) {
         this.providers = registry::provider;
+        this.history = history;
     }
     public GenerationService(ModelProvider provider, String model) {
         if (model.isBlank()) throw new IllegalArgumentException("Configured model must not be blank");
@@ -38,15 +40,17 @@ public class GenerationService {
         String model = request.model();
         ModelProvider provider = providers.apply(model);
         long start = System.nanoTime();
+        GenerateResponse execution;
         try {
             String result = provider.generate(model, request.prompt());
-            return new GenerateResponse(model, result, elapsed(start), "SUCCESS", null);
+            execution = new GenerateResponse(model, result, elapsed(start), "SUCCESS", null);
         } catch (ProviderException e) {
-            return new GenerateResponse(model, null, elapsed(start), "FAILED", new ApiError(e.code(), e.getMessage()));
+            execution = new GenerateResponse(model, null, elapsed(start), "FAILED", new ApiError(e.code(), e.getMessage()));
         } catch (RuntimeException e) {
-            return new GenerateResponse(model, null, elapsed(start), "FAILED",
+            execution = new GenerateResponse(model, null, elapsed(start), "FAILED",
                     new ApiError("INTERNAL_ERROR", "An unexpected error occurred"));
         }
+        return history == null ? execution : history.record(request.prompt(), execution);
     }
     private long elapsed(long start) { return (System.nanoTime() - start) / 1_000_000; }
     public static class UnknownModelException extends RuntimeException { }
