@@ -10,7 +10,7 @@ import vn.alfha.modelhub.service.GenerationService.UnknownModelException;
 public class ApiExceptionHandler {
     @ExceptionHandler({IllegalArgumentException.class, HttpMessageNotReadableException.class})
     public ResponseEntity<ApiError> invalid(Exception exception) {
-        return ResponseEntity.badRequest().body(new ApiError("INVALID_INPUT", "Provide valid JSON with a model and a prompt of 1 to 32000 characters"));
+        return ResponseEntity.badRequest().body(new ApiError("INVALID_INPUT", "Provide valid model selection and a prompt of 1 to 32000 characters; comparison requires two distinct models"));
     }
     @ExceptionHandler(UnknownModelException.class)
     public ResponseEntity<ApiError> unknown() {

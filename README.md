@@ -3,10 +3,11 @@
 Java backend for a future multi-model AI orchestration and evaluation platform.
 This repository is independent of ALFHA Agent.
 
-## Current scope: Milestone 3
+## Current scope: Milestone 4
 
 Implemented: Spring Boot application, JSON health endpoint, Java 21 Maven build,
-Ollama and optional OpenRouter providers, model listing, generation endpoint, and automated tests. Comparison, PostgreSQL,
+Ollama and optional OpenRouter providers, model listing, generation, concurrent comparison,
+and automated tests. PostgreSQL,
 Docker Compose, and CI belong to later milestones and are not implemented yet.
 
 ## Prerequisites
@@ -209,5 +210,45 @@ integration remains unverified. Local Ollama was verified in Milestone 2 as abov
 Reference: [OpenRouter chat API](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion)
 and [free variants](https://openrouter.ai/docs/guides/routing/model-variants/free).
 
-Next: Milestone 4 — concurrent model comparison with independent results and
-partial failure handling, without automatic ranking.
+## Model comparison
+
+`POST /api/compare` accepts exactly two distinct configured model identifiers and
+one shared prompt. With the current registry, enable OpenRouter to configure a
+second model. Use `GET /api/models` to inspect your configured selections.
+
+```powershell
+$body = @{ models = @('qwen3:4b', $env:OPENROUTER_MODEL); prompt = 'Explain REST in one sentence.' } | ConvertTo-Json
+Invoke-RestMethod http://localhost:8080/api/compare -Method Post -ContentType 'application/json' -Body $body
+```
+
+Example partial failure response (durations vary):
+
+```json
+{
+  "results": [
+    {"model":"qwen3:4b","response":"REST is ...","durationMs":1100,"status":"SUCCESS","error":null},
+    {"model":"vendor/model:free","response":null,"durationMs":120000,"status":"FAILED","error":{"code":"TIMEOUT","message":"OpenRouter request timed out"}}
+  ]
+}
+```
+
+`ComparisonService` validates both selections and the prompt before any provider
+call. It starts two tasks on Java 21 virtual threads and reuses `GenerationService`
+for individual execution, timing, and errors. Each provider retains its configured
+timeout. Results are returned in selection order, regardless of completion order.
+Provider failures, including unexpected runtime exceptions, become independent
+failed results and never discard the other model's result. No winner is selected.
+
+HTTP 200 means the comparison completed, including when one or both executions
+failed; inspect each result's `status` and `error`. Invalid requests and unknown
+models return HTTP 400 before execution. `/api/generate` retains its individual
+HTTP failure codes. Both endpoints use the same prompt length limit.
+
+Concurrency tests use a latch that requires both fake providers to enter before
+either can finish. Other tests cover failures/timeouts in either position, both
+failures, input rejection before provider calls, result ordering, and real HTTP
+requests against local Ollama/OpenRouter stubs. Real two-provider comparison has
+not been verified; no cloud calls were made during this milestone.
+
+Next: Milestone 5 — PostgreSQL execution history, database migrations, paginated
+`GET /api/runs`, and database integration tests.

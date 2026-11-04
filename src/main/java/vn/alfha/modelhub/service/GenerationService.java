@@ -20,10 +20,21 @@ public class GenerationService {
             return provider;
         };
     }
-    public GenerateResponse generate(GenerateRequest request) {
+    GenerationService(java.util.Map<String, ModelProvider> providers) {
+        this.providers = model -> {
+            var provider = providers.get(model);
+            if (provider == null) throw new UnknownModelException();
+            return provider;
+        };
+    }
+    public void validate(GenerateRequest request) {
         if (request == null || request.model() == null || request.model().isBlank()
                 || request.prompt() == null || request.prompt().isBlank() || request.prompt().length() > 32000)
             throw new IllegalArgumentException("Provide a model and a prompt of 1 to 32000 characters");
+        providers.apply(request.model());
+    }
+    public GenerateResponse generate(GenerateRequest request) {
+        validate(request);
         String model = request.model();
         ModelProvider provider = providers.apply(model);
         long start = System.nanoTime();
@@ -32,6 +43,9 @@ public class GenerationService {
             return new GenerateResponse(model, result, elapsed(start), "SUCCESS", null);
         } catch (ProviderException e) {
             return new GenerateResponse(model, null, elapsed(start), "FAILED", new ApiError(e.code(), e.getMessage()));
+        } catch (RuntimeException e) {
+            return new GenerateResponse(model, null, elapsed(start), "FAILED",
+                    new ApiError("INTERNAL_ERROR", "An unexpected error occurred"));
         }
     }
     private long elapsed(long start) { return (System.nanoTime() - start) / 1_000_000; }
