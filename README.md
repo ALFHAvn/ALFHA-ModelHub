@@ -16,6 +16,8 @@ Dataset v2 clarifies the literal-string task while preserving v1. Use
 `datasetVersion: "2"` to select it; existing requests continue to use v1.
 Three [real local v2 repetitions](benchmarks/baselines/2026-11-05-qwen3-4b-v2/README.md)
 passed all ten tasks in each run; this describes these tasks, not general model accuracy.
+The [first fixed free cloud comparison](benchmarks/comparisons/2026-11-05-qwen3-vs-lfm25-v2/README.md)
+records paired local/cloud results, including rate limits and one JSON-format failure.
 
 ## Prerequisites
 

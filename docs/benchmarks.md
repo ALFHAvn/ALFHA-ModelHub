@@ -39,6 +39,44 @@ The [first three real v2 repetitions](../benchmarks/baselines/2026-11-05-qwen3-4
 passed 10/10 each with zero provider failures. The saved reports, model/runtime
 metadata, and comparison to the original v1 baseline are preserved alongside the analysis.
 
+## Fixed free cloud comparison runner
+
+To run paired local/cloud repetitions, choose a specific currently listed free
+text model ID and use:
+
+```powershell
+./scripts/run-cloud-comparison.ps1 -CloudModel 'vendor/model:free' -DatasetVersion 2 -Repetitions 3
+```
+
+The model ID above is a placeholder. The runner checks the live OpenRouter catalog
+for zero prompt, completion, and per-request pricing, then checks that the key
+has enough remaining free-request quota before starting. It accepts only fixed
+`:free` IDs, never the variable `openrouter/free` router. The default three paired
+runs make 30 local and 30 cloud attempts, with no automatic retries, paid fallback,
+or model substitution. A listed model can still fail at runtime; failed attempts
+are retained in reports and are not scored as incorrect answers.
+
+The ignored `.env` must contain the database password and OpenRouter API key.
+The script temporarily overrides the cloud model/enabled flag and port only in
+its own process, leaving `.env` unchanged. Expanded Compose configuration and
+credentials are never printed or exported. Reports, the public catalog entry,
+free-request counters, and local runtime metadata are saved under a timestamped
+`target/cloud-comparison-*` directory. Each report is retrieved from PostgreSQL
+and every attempt is matched to execution history before verification completes.
+The isolated stack is stopped afterward; its database volume is preserved.
+
+These are end-to-end observations of a local deployment and a hosted service,
+not a controlled hardware comparison. Catalog pricing and quota are observations
+at preflight time, not guarantees of future availability. The cloud model ID is
+fixed, but provider/server revisions and backend routing are not pinned or
+independently audited. Sampling defaults are recorded as defaults, not fixed seeds.
+
+The [first measured fixed-cloud comparison](../benchmarks/comparisons/2026-11-05-qwen3-vs-lfm25-v2/README.md)
+ran three paired repetitions with actual Ollama and `liquid/lfm-2.5-2.6b:free`.
+It preserves all rate-limited attempts as `NOT_SCORED` and distinguishes them from
+the one successful response that failed its JSON formatting rule. See the report
+for complete coverage, timings, quota observations, and limitations.
+
 ## Run and inspect
 
 Run PostgreSQL and the app using the existing Compose or host-Java setup.

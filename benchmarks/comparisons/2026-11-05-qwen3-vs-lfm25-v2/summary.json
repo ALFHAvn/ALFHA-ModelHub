@@ -1,0 +1,191 @@
+{
+  "datasetId": "basics",
+  "datasetVersion": "2",
+  "datasetSha256": "25e3bdbecce5b8e41b3e8acf4f896de3226940ac7bb981def7801a622bafe2c1",
+  "scoringVersion": "objective-v1",
+  "repetitions": 3,
+  "models": [
+    {
+      "model": "liquid/lfm-2.5-2.6b:free",
+      "attempted": 30,
+      "successful": 17,
+      "failed": 13,
+      "passed": 16,
+      "scoringFailures": 1,
+      "passRateAmongSuccessful": 0.9411764705882353,
+      "passRateAllAttempts": 0.5333333333333333,
+      "averageSuccessfulDurationMs": 943.4705882352941,
+      "tasksWithSuccessfulResponses": 10,
+      "errors": [
+        {
+          "code": "RATE_LIMITED",
+          "count": 13
+        }
+      ]
+    },
+    {
+      "model": "qwen3:4b",
+      "attempted": 30,
+      "successful": 30,
+      "failed": 0,
+      "passed": 30,
+      "scoringFailures": 0,
+      "passRateAmongSuccessful": 1,
+      "passRateAllAttempts": 1,
+      "averageSuccessfulDurationMs": 14533.233333333334,
+      "tasksWithSuccessfulResponses": 10,
+      "errors": []
+    }
+  ],
+  "cloudTaskCoverage": [
+    {
+      "taskId": "arithmetic",
+      "successful": 3,
+      "passed": 3,
+      "rateLimited": 0
+    },
+    {
+      "taskId": "array-field",
+      "successful": 2,
+      "passed": 1,
+      "rateLimited": 1
+    },
+    {
+      "taskId": "boolean",
+      "successful": 1,
+      "passed": 1,
+      "rateLimited": 2
+    },
+    {
+      "taskId": "boolean-field",
+      "successful": 2,
+      "passed": 2,
+      "rateLimited": 1
+    },
+    {
+      "taskId": "capital",
+      "successful": 1,
+      "passed": 1,
+      "rateLimited": 2
+    },
+    {
+      "taskId": "json-nested",
+      "successful": 1,
+      "passed": 1,
+      "rateLimited": 2
+    },
+    {
+      "taskId": "json-object",
+      "successful": 1,
+      "passed": 1,
+      "rateLimited": 2
+    },
+    {
+      "taskId": "null-field",
+      "successful": 2,
+      "passed": 2,
+      "rateLimited": 1
+    },
+    {
+      "taskId": "sorting",
+      "successful": 3,
+      "passed": 3,
+      "rateLimited": 0
+    },
+    {
+      "taskId": "typed-fields",
+      "successful": 1,
+      "passed": 1,
+      "rateLimited": 2
+    }
+  ],
+  "perRun": [
+    {
+      "id": "04200112-620e-43ba-b9e9-a85449a5ef11",
+      "startedAt": "2026-11-04T20:14:06.672414965Z",
+      "completedAt": "2026-11-04T20:16:45.638250333Z",
+      "summaries": [
+        {
+          "model": "qwen3:4b",
+          "attempted": 10,
+          "successful": 10,
+          "failed": 0,
+          "passed": 10,
+          "scoringFailures": 0,
+          "passRateAmongSuccessful": 1.0,
+          "passRateAllAttempts": 1.0,
+          "averageSuccessfulDurationMs": 15891.2
+        },
+        {
+          "model": "liquid/lfm-2.5-2.6b:free",
+          "attempted": 10,
+          "successful": 4,
+          "failed": 6,
+          "passed": 4,
+          "scoringFailures": 0,
+          "passRateAmongSuccessful": 1.0,
+          "passRateAllAttempts": 0.4,
+          "averageSuccessfulDurationMs": 881.25
+        }
+      ]
+    },
+    {
+      "id": "fbfddd90-ef7b-402a-b41e-b117bafad41d",
+      "startedAt": "2026-11-04T20:16:51.830473748Z",
+      "completedAt": "2026-11-04T20:19:16.298881430Z",
+      "summaries": [
+        {
+          "model": "qwen3:4b",
+          "attempted": 10,
+          "successful": 10,
+          "failed": 0,
+          "passed": 10,
+          "scoringFailures": 0,
+          "passRateAmongSuccessful": 1.0,
+          "passRateAllAttempts": 1.0,
+          "averageSuccessfulDurationMs": 14441.2
+        },
+        {
+          "model": "liquid/lfm-2.5-2.6b:free",
+          "attempted": 10,
+          "successful": 7,
+          "failed": 3,
+          "passed": 7,
+          "scoringFailures": 0,
+          "passRateAmongSuccessful": 1.0,
+          "passRateAllAttempts": 0.7,
+          "averageSuccessfulDurationMs": 1038.5714285714287
+        }
+      ]
+    },
+    {
+      "id": "eac59751-89c9-42a2-ac28-e46b5860c3d8",
+      "startedAt": "2026-11-04T20:19:22.431789975Z",
+      "completedAt": "2026-11-04T20:21:35.151408903Z",
+      "summaries": [
+        {
+          "model": "qwen3:4b",
+          "attempted": 10,
+          "successful": 10,
+          "failed": 0,
+          "passed": 10,
+          "scoringFailures": 0,
+          "passRateAmongSuccessful": 1.0,
+          "passRateAllAttempts": 1.0,
+          "averageSuccessfulDurationMs": 13267.3
+        },
+        {
+          "model": "liquid/lfm-2.5-2.6b:free",
+          "attempted": 10,
+          "successful": 6,
+          "failed": 4,
+          "passed": 5,
+          "scoringFailures": 1,
+          "passRateAmongSuccessful": 0.8333333333333334,
+          "passRateAllAttempts": 0.5,
+          "averageSuccessfulDurationMs": 874.0
+        }
+      ]
+    }
+  ]
+}

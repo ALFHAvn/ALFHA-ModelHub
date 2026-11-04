@@ -1,0 +1,18 @@
+{
+  "commit": "da38d3c8fbc83a11271254e9985b2a5f64091a89",
+  "verifiedAtUtc": "2026-11-04T20:21:41.1032056Z",
+  "datasetVersion": "2",
+  "repetitions": 3,
+  "fixedCloudModel": "liquid/lfm-2.5-2.6b:free",
+  "cloudAttempts": 30,
+  "historyMatches": 60,
+  "localModelDigestUnchanged": true,
+  "zeroCatalogPricingAtStart": true,
+  "automaticRetries": false,
+  "paidFallbacks": false,
+  "reportIds": [
+    "04200112-620e-43ba-b9e9-a85449a5ef11",
+    "fbfddd90-ef7b-402a-b41e-b117bafad41d",
+    "eac59751-89c9-42a2-ac28-e46b5860c3d8"
+  ]
+}

@@ -1,0 +1,394 @@
+{
+  "id": "eac59751-89c9-42a2-ac28-e46b5860c3d8",
+  "startedAt": "2026-11-04T20:19:22.431789975Z",
+  "completedAt": "2026-11-04T20:21:35.151408903Z",
+  "datasetSha256": "25e3bdbecce5b8e41b3e8acf4f896de3226940ac7bb981def7801a622bafe2c1",
+  "scoringVersion": "objective-v1",
+  "dataset": {
+    "id": "basics",
+    "version": "2",
+    "tasks": [
+      {
+        "id": "arithmetic",
+        "prompt": "What is 17 + 25? Reply with only the integer. /no_think",
+        "rule": "EXACT",
+        "expected": "42",
+        "fields": null
+      },
+      {
+        "id": "capital",
+        "prompt": "What is the capital of France? Reply with only the city name. /no_think",
+        "rule": "EXACT",
+        "expected": "Paris",
+        "fields": null
+      },
+      {
+        "id": "boolean",
+        "prompt": "Is 9 a prime number? Reply with only false in lowercase. /no_think",
+        "rule": "EXACT",
+        "expected": "false",
+        "fields": null
+      },
+      {
+        "id": "sorting",
+        "prompt": "Sort 3, 1, 2 ascending. Reply only with comma-separated integers without spaces. /no_think",
+        "rule": "EXACT",
+        "expected": "1,2,3",
+        "fields": null
+      },
+      {
+        "id": "json-object",
+        "prompt": "Return any valid JSON object. Do not use markdown or surrounding text. /no_think",
+        "rule": "JSON_OBJECT",
+        "expected": null,
+        "fields": null
+      },
+      {
+        "id": "json-nested",
+        "prompt": "Return only a JSON object with book set to an object whose title is the string Example. /no_think",
+        "rule": "JSON_FIELDS",
+        "expected": null,
+        "fields": {
+          "book": {
+            "title": "Example"
+          }
+        }
+      },
+      {
+        "id": "typed-fields",
+        "prompt": "Return only a JSON object with name set to Ada and age set to the number 37. /no_think",
+        "rule": "JSON_FIELDS",
+        "expected": null,
+        "fields": {
+          "age": 37,
+          "name": "Ada"
+        }
+      },
+      {
+        "id": "boolean-field",
+        "prompt": "Return only a JSON object with active set to boolean true and count set to the number 3. /no_think",
+        "rule": "JSON_FIELDS",
+        "expected": null,
+        "fields": {
+          "count": 3,
+          "active": true
+        }
+      },
+      {
+        "id": "array-field",
+        "prompt": "Return only a JSON object with numbers set to the array [1,2,3]. /no_think",
+        "rule": "JSON_FIELDS",
+        "expected": null,
+        "fields": {
+          "numbers": [
+            1,
+            2,
+            3
+          ]
+        }
+      },
+      {
+        "id": "null-field",
+        "prompt": "Return only a JSON object with value set to JSON null and label set to the literal JSON string \"empty\" (not an empty string). /no_think",
+        "rule": "JSON_FIELDS",
+        "expected": null,
+        "fields": {
+          "label": "empty",
+          "value": null
+        }
+      }
+    ]
+  },
+  "models": [
+    {
+      "model": "qwen3:4b",
+      "provider": "ollama",
+      "timeout": "120s",
+      "inferenceSettings": "Provider defaults; non-streaming; sampling settings and model weights are not pinned"
+    },
+    {
+      "model": "liquid/lfm-2.5-2.6b:free",
+      "provider": "openrouter",
+      "timeout": "120s",
+      "inferenceSettings": "Provider defaults; non-streaming; sampling settings and model weights are not pinned"
+    }
+  ],
+  "results": [
+    {
+      "taskId": "arithmetic",
+      "execution": {
+        "requestId": "9926a62f-1e6b-4bc2-9791-349b2273f8eb",
+        "model": "qwen3:4b",
+        "response": "42",
+        "durationMs": 4560,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "arithmetic",
+      "execution": {
+        "requestId": "3f1c66b0-a8e0-4bd7-aa64-02bcbfdab96c",
+        "model": "liquid/lfm-2.5-2.6b:free",
+        "response": "42",
+        "durationMs": 691,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "capital",
+      "execution": {
+        "requestId": "1a89fbf0-acac-4f40-ae86-6c63babdf3a0",
+        "model": "qwen3:4b",
+        "response": "Paris",
+        "durationMs": 2255,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "capital",
+      "execution": {
+        "requestId": "5b83d578-78b2-461a-9f3c-4e1e54bad0ff",
+        "model": "liquid/lfm-2.5-2.6b:free",
+        "response": null,
+        "durationMs": 348,
+        "status": "FAILED",
+        "error": {
+          "code": "RATE_LIMITED",
+          "message": "Provider rate limit reached"
+        }
+      },
+      "score": "NOT_SCORED"
+    },
+    {
+      "taskId": "boolean",
+      "execution": {
+        "requestId": "f1e6d248-cd43-456f-8295-2ebcf1a576a8",
+        "model": "qwen3:4b",
+        "response": "false",
+        "durationMs": 7758,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "boolean",
+      "execution": {
+        "requestId": "41124e44-ce96-4f90-bcb0-cadc0b6fe5ea",
+        "model": "liquid/lfm-2.5-2.6b:free",
+        "response": null,
+        "durationMs": 371,
+        "status": "FAILED",
+        "error": {
+          "code": "RATE_LIMITED",
+          "message": "Provider rate limit reached"
+        }
+      },
+      "score": "NOT_SCORED"
+    },
+    {
+      "taskId": "sorting",
+      "execution": {
+        "requestId": "cbf7b386-c53b-4742-b0de-595ddb29642a",
+        "model": "qwen3:4b",
+        "response": "1,2,3",
+        "durationMs": 13248,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "sorting",
+      "execution": {
+        "requestId": "3e5bf826-8818-4c65-8440-34e2131e522d",
+        "model": "liquid/lfm-2.5-2.6b:free",
+        "response": "1,2,3",
+        "durationMs": 752,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "json-object",
+      "execution": {
+        "requestId": "0831c5ec-44ff-4f59-b5b5-c0e2bbe51e56",
+        "model": "qwen3:4b",
+        "response": "{}",
+        "durationMs": 28067,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "json-object",
+      "execution": {
+        "requestId": "eb8b20c4-897b-4361-a253-ec5c60fe3e5c",
+        "model": "liquid/lfm-2.5-2.6b:free",
+        "response": "{\n  \"name\": \"example\",\n  \"age\": 30,\n  \"active\": true\n}",
+        "durationMs": 781,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "json-nested",
+      "execution": {
+        "requestId": "be6f748a-c017-4ad1-9f22-ea5f91945805",
+        "model": "qwen3:4b",
+        "response": "{\"book\":{\"title\":\"Example\"}}",
+        "durationMs": 18211,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "json-nested",
+      "execution": {
+        "requestId": "66e52e16-14ad-45eb-bb96-ca63c8ae9e67",
+        "model": "liquid/lfm-2.5-2.6b:free",
+        "response": "{\n  \"book\": {\n    \"title\": \"Example\"\n  }\n}",
+        "durationMs": 1017,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "typed-fields",
+      "execution": {
+        "requestId": "882323f2-015b-4bf3-992a-64537aa83c51",
+        "model": "qwen3:4b",
+        "response": "{\"name\": \"Ada\", \"age\": 37}",
+        "durationMs": 1865,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "typed-fields",
+      "execution": {
+        "requestId": "e8d42f6d-c2df-461f-a0da-ddf65c4ef20e",
+        "model": "liquid/lfm-2.5-2.6b:free",
+        "response": null,
+        "durationMs": 353,
+        "status": "FAILED",
+        "error": {
+          "code": "RATE_LIMITED",
+          "message": "Provider rate limit reached"
+        }
+      },
+      "score": "NOT_SCORED"
+    },
+    {
+      "taskId": "boolean-field",
+      "execution": {
+        "requestId": "7e259fad-89eb-4c27-bc06-5baf5864ec5b",
+        "model": "qwen3:4b",
+        "response": "{\"active\":true,\"count\":3}",
+        "durationMs": 1576,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "boolean-field",
+      "execution": {
+        "requestId": "2abe68e5-2b87-4746-8d23-235a06ea8e59",
+        "model": "liquid/lfm-2.5-2.6b:free",
+        "response": "{\n  \"active\": true,\n  \"count\": 3\n}",
+        "durationMs": 769,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "array-field",
+      "execution": {
+        "requestId": "b258055d-b3fa-48f2-8534-4f9c1d5b9fd4",
+        "model": "qwen3:4b",
+        "response": "{\"numbers\": [1,2,3]}",
+        "durationMs": 6544,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "array-field",
+      "execution": {
+        "requestId": "a503340b-883d-4606-b410-b4e584902024",
+        "model": "liquid/lfm-2.5-2.6b:free",
+        "response": "```json\n{\n  \"numbers\": [1, 2, 3]\n}\n```",
+        "durationMs": 1234,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "FAIL"
+    },
+    {
+      "taskId": "null-field",
+      "execution": {
+        "requestId": "53313dca-26c4-42f7-877f-132a8a8b8bcc",
+        "model": "qwen3:4b",
+        "response": "{\"value\":null,\"label\":\"empty\"}",
+        "durationMs": 48589,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "null-field",
+      "execution": {
+        "requestId": "bb4e0483-aa3d-4712-b072-75edec730123",
+        "model": "liquid/lfm-2.5-2.6b:free",
+        "response": null,
+        "durationMs": 410,
+        "status": "FAILED",
+        "error": {
+          "code": "RATE_LIMITED",
+          "message": "Provider rate limit reached"
+        }
+      },
+      "score": "NOT_SCORED"
+    }
+  ],
+  "summaries": [
+    {
+      "model": "qwen3:4b",
+      "attempted": 10,
+      "successful": 10,
+      "failed": 0,
+      "passed": 10,
+      "scoringFailures": 0,
+      "passRateAmongSuccessful": 1.0,
+      "passRateAllAttempts": 1.0,
+      "averageSuccessfulDurationMs": 13267.3
+    },
+    {
+      "model": "liquid/lfm-2.5-2.6b:free",
+      "attempted": 10,
+      "successful": 6,
+      "failed": 4,
+      "passed": 5,
+      "scoringFailures": 1,
+      "passRateAmongSuccessful": 0.8333333333333334,
+      "passRateAllAttempts": 0.5,
+      "averageSuccessfulDurationMs": 874.0
+    }
+  ]
+}

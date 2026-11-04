@@ -140,3 +140,23 @@ retries were made. The stack was stopped after verification.
 Evidence and limitations: `benchmarks/baselines/2026-11-05-qwen3-4b-v2/`.
 These different-version samples do not establish a model improvement or general
 accuracy estimate; the original v1 reports are preserved unchanged.
+
+## Fixed free cloud comparison
+
+On November 5, 2026, three paired `basics` v2 repetitions ran against actual local
+`qwen3:4b` and fixed `liquid/lfm-2.5-2.6b:free`, selected from the live zero-priced
+catalog. The new PowerShell runner passed a syntax check and completed this
+real-service workflow; application source and scoring behavior were unchanged.
+
+Local results: 30/30 execution successes and scoring passes. Cloud results:
+17 successful responses, 16 scoring passes, one JSON-fence scoring failure, and
+13 rate-limited attempts recorded as `NOT_SCORED`. All 60 execution IDs, responses,
+and statuses matched persisted history. All ten cloud tasks had at least one
+successful response, but repetition coverage was uneven. No retries, paid fallback,
+model substitution, or dataset/scorer changes were made during measurement.
+
+The key's observed free-request allowance went from 48 remaining to 31 remaining.
+The test stack was stopped, the local model digest remained unchanged, and `.env`
+was not modified. Raw reports, public model-catalog metadata, quota counters,
+combined metrics, and interpretation are in
+`benchmarks/comparisons/2026-11-05-qwen3-vs-lfm25-v2/`.
