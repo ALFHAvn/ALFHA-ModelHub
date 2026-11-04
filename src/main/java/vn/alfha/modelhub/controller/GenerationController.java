@@ -14,7 +14,7 @@ public class GenerationController {
         var result = service.generate(request);
         int status = result.error() == null ? 200 : switch (result.error().code()) {
             case "TIMEOUT" -> 504;
-            case "CONNECTION_FAILURE", "INTERRUPTED" -> 503;
+            case "CONNECTION_FAILURE", "INTERRUPTED", "CONFIGURATION_ERROR" -> 503;
             case "RATE_LIMITED" -> 429;
             default -> 502;
         };

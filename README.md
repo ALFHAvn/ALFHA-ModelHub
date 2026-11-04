@@ -3,10 +3,10 @@
 Java backend for a future multi-model AI orchestration and evaluation platform.
 This repository is independent of ALFHA Agent.
 
-## Current scope: Milestone 2
+## Current scope: Milestone 3
 
 Implemented: Spring Boot application, JSON health endpoint, Java 21 Maven build,
-Ollama provider, generation endpoint, and automated tests. Cloud providers, comparison, PostgreSQL,
+Ollama and optional OpenRouter providers, model listing, generation endpoint, and automated tests. Comparison, PostgreSQL,
 Docker Compose, and CI belong to later milestones and are not implemented yet.
 
 ## Prerequisites
@@ -132,7 +132,7 @@ The application never downloads models automatically.
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Trusted Ollama server origin |
-| `OLLAMA_MODEL` | `qwen3:4b` | Only accepted model identifier in this milestone |
+| `OLLAMA_MODEL` | `qwen3:4b` | Configured local model identifier |
 | `OLLAMA_TIMEOUT` | `120s` | Positive connection and complete request timeout |
 
 ```powershell
@@ -167,5 +167,47 @@ application called the installed local `qwen3:4b` through `/api/generate` and
 returned `response: Hello`, `status: SUCCESS`, `error: null`, and `durationMs: 6540`.
 The temporary application process was stopped afterward. No model was downloaded.
 
-Next: Milestone 3 — OpenRouter integration with an environment-based key,
-configurable free model, provider selection, and tests without real cloud calls.
+## Optional OpenRouter provider
+
+OpenRouter is disabled by default. Configure it through environment variables:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `OPENROUTER_ENABLED` | `false` | Register the cloud model when true |
+| `OPENROUTER_MODEL` | empty | Free model ID selected from the current OpenRouter catalog |
+| `OPENROUTER_API_KEY` | empty | Secret API key; never put it in source or request JSON |
+| `OPENROUTER_TIMEOUT` | `120s` | Positive connection and request timeout |
+| `OPENROUTER_ENDPOINT` | `https://openrouter.ai/api/v1/chat/completions` | Trusted endpoint; requires HTTPS except loopback test servers |
+
+Choose a currently available `vendor/model:free` ID, or `openrouter/free`.
+The application rejects paid model IDs and supplies no fallback model list.
+Availability is not hardcoded or checked at startup. A missing API key produces
+HTTP 503 / `CONFIGURATION_ERROR` without a network call. OpenRouter HTTP errors
+including authentication failures use sanitized `PROVIDER_ERROR`; rate limits
+use `RATE_LIMITED`. Other errors use the same generation envelope and HTTP codes
+as Ollama. Redirects are not followed, and credentials are not returned or logged.
+
+After configuring the environment and restarting the app:
+
+```powershell
+Invoke-RestMethod http://localhost:8080/api/models
+$body = @{ model = $env:OPENROUTER_MODEL; prompt = 'Explain REST in one sentence.' } | ConvertTo-Json
+Invoke-RestMethod http://localhost:8080/api/generate -Method Post -ContentType 'application/json' -Body $body
+```
+
+`GET /api/models` lists configured identifiers and provider names only. It is a
+configuration listing, not a live availability check. Disabled providers are omitted.
+`ModelRegistry` resolves the selected ID to a `ModelProvider`; controllers contain
+no provider-specific routing. Existing Ollama requests keep the same format.
+
+OpenRouter tests use loopback HTTP stubs and fake keys. They cover authenticated
+chat payloads, provider selection, public model listing, paid-model rejection,
+missing credentials, rate limits, upstream failures, invalid responses, timeouts,
+and connection failures. No real OpenRouter call has been made, so real cloud
+integration remains unverified. Local Ollama was verified in Milestone 2 as above.
+
+Reference: [OpenRouter chat API](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion)
+and [free variants](https://openrouter.ai/docs/guides/routing/model-variants/free).
+
+Next: Milestone 4 — concurrent model comparison with independent results and
+partial failure handling, without automatic ranking.
