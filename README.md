@@ -9,7 +9,7 @@ Implemented: Spring Boot application, JSON health endpoint, Java 21 Maven build,
 Ollama and optional OpenRouter providers, model listing, generation, concurrent comparison,
 PostgreSQL execution history with Flyway migrations, and automated tests.
 Docker Compose and GitHub Actions are included. Real cloud verification and a
-remote CI run remain pending; see the acceptance record in `docs/validation.md`.
+real two-provider comparison remain pending; see the acceptance record in `docs/validation.md`.
 
 ## Prerequisites
 
@@ -371,7 +371,8 @@ uses Java 21 on Ubuntu, runs `mvn clean verify` (including real PostgreSQL
 Testcontainers tests), builds the Docker image, validates Compose, and uploads
 test reports. Official actions are pinned to commit hashes and repository
 permissions are read-only. No cloud key is needed; no deployment or image push is
-configured. The workflow has not run on GitHub until this commit is pushed.
+configured. The initial pushed milestone commit passed GitHub CI; see the
+validation record for the exact tested commit and run.
 
 `examples/requests.http` contains health, model listing, local/cloud generation,
 comparison, history, and invalid-input requests. Replace its cloud placeholder

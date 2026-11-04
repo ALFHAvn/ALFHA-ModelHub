@@ -16,7 +16,7 @@ kept separate from implementation status.
 | Database failures | Isolated integration test simulates unavailable table and checks safe failure with preserved output |
 | Input/errors | Validation, unknown models, malformed JSON, upstream failures, rate limits, timeouts, 404/405/415 tested |
 | Docker delivery | Multi-stage image and Compose configuration provided; local smoke result recorded below |
-| Automated CI | Workflow provided; GitHub run pending explicit authorization to push |
+| Automated CI | [Java CI passed](https://github.com/ALFHAvn/ALFHA-ModelHub/actions/runs/41893585994) for commit `69eaffa186f7e5f8284576f7aa783def09d936df` |
 | No paid subscription required | Local inference works; cloud disabled by default and restricted to free identifiers, without paid fallback |
 
 Automated tests use fake providers and loopback HTTP servers, not real cloud APIs.
@@ -50,6 +50,29 @@ Completed locally on November 5, 2026:
 - Test containers/network were stopped and removed. The isolated
   `modelhub-m6-check_postgres-data` volume and built images were preserved.
 
-No real OpenRouter request, remote push, GitHub CI execution, deployment, or paid
-service was used. All six implementation milestones are present; the real cloud
-and remote CI checks above remain pending rather than being claimed as passed.
+The Milestone 6 local checks made no cloud calls or deployments. The completed
+milestones were subsequently pushed at the user's request, and Java CI passed
+on GitHub. Real cloud checks remain pending.
+
+## Completing real cloud acceptance
+
+Create the ignored `.env` from `.env.example`, then set `DATABASE_PASSWORD`,
+`OPENROUTER_API_KEY`, and `OPENROUTER_MODEL` (a current `:free` model or
+`openrouter/free`). Do not paste credentials into chat. Keep Ollama running with
+the configured local model installed. Run from PowerShell:
+
+```powershell
+./scripts/verify-cloud.ps1
+```
+
+This starts a separate local Compose project on loopback port 18083, enables
+OpenRouter for that process, and makes two cloud requests: one standalone and one
+alongside Ollama in a comparison. It verifies that all three execution IDs and
+responses match saved history. Free-model rate limits can cause a failed check;
+the script does not retry or fall back to paid models.
+
+On success, `target/cloud-validation.json` records the tested commit, execution
+IDs, model IDs, statuses, and durations without keys or response text. The stack
+is stopped afterward and its database volume is preserved. No tag or push is
+performed. Create `v0.1.0` only after real-service checks and CI pass for the
+release commit.
