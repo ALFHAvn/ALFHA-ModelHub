@@ -35,6 +35,10 @@ Each repetition can take several minutes. Compare v1 and v2 as different prompt
 conditions, not as a controlled measure of improved model quality. Three runs are
 a small descriptive sample, not enough to establish statistical superiority.
 
+The [first three real v2 repetitions](../benchmarks/baselines/2026-11-05-qwen3-4b-v2/README.md)
+passed 10/10 each with zero provider failures. The saved reports, model/runtime
+metadata, and comparison to the original v1 baseline are preserved alongside the analysis.
+
 ## Run and inspect
 
 Run PostgreSQL and the app using the existing Compose or host-Java setup.

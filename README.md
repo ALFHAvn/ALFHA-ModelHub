@@ -14,6 +14,8 @@ Milestone 7 adds a ten-task objective benchmark, saved reports, and per-model
 summaries. See [benchmark usage and scoring](docs/benchmarks.md).
 Dataset v2 clarifies the literal-string task while preserving v1. Use
 `datasetVersion: "2"` to select it; existing requests continue to use v1.
+Three [real local v2 repetitions](benchmarks/baselines/2026-11-05-qwen3-4b-v2/README.md)
+passed all ten tasks in each run; this describes these tasks, not general model accuracy.
 
 ## Prerequisites
 

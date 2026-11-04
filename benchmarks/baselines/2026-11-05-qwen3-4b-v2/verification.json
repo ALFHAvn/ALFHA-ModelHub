@@ -1,0 +1,14 @@
+{
+  "commit": "cae65138834c10f925b73590ff403a15270f6eb1",
+  "verifiedAtUtc": "2026-11-04T20:05:53.6514293Z",
+  "datasetVersion": "2",
+  "repetitions": 3,
+  "cloudEnabled": false,
+  "historyMatches": 30,
+  "modelDigestUnchanged": true,
+  "reportIds": [
+    "70dbf429-d763-411c-b788-949b1b6927ee",
+    "9678bcb8-0c64-4669-ba62-3b68a621cc1f",
+    "180d7713-c08a-4be3-afda-f954833addaa"
+  ]
+}

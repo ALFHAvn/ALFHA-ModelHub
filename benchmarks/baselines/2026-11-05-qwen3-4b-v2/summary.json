@@ -1,0 +1,36 @@
+{
+  "datasetId": "basics",
+  "datasetVersion": "2",
+  "datasetSha256": "25e3bdbecce5b8e41b3e8acf4f896de3226940ac7bb981def7801a622bafe2c1",
+  "scoringVersion": "objective-v1",
+  "model": "qwen3:4b",
+  "repetitions": 3,
+  "attempted": 30,
+  "passed": 30,
+  "providerFailures": 0,
+  "averageProviderDurationMs": 15574.6,
+  "totalProviderDurationMs": 467238.0,
+  "perRun": [
+    {
+      "id": "70dbf429-d763-411c-b788-949b1b6927ee",
+      "passed": 10,
+      "averageProviderDurationMs": 13394.5,
+      "startedAt": "2026-11-04T19:57:47.778940102Z",
+      "completedAt": "2026-11-04T20:00:01.777674014Z"
+    },
+    {
+      "id": "9678bcb8-0c64-4669-ba62-3b68a621cc1f",
+      "passed": 10,
+      "averageProviderDurationMs": 16816.5,
+      "startedAt": "2026-11-04T20:00:07.959681690Z",
+      "completedAt": "2026-11-04T20:02:56.160057465Z"
+    },
+    {
+      "id": "180d7713-c08a-4be3-afda-f954833addaa",
+      "passed": 10,
+      "averageProviderDurationMs": 16512.8,
+      "startedAt": "2026-11-04T20:03:02.267528553Z",
+      "completedAt": "2026-11-04T20:05:47.572282701Z"
+    }
+  ]
+}

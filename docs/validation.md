@@ -121,3 +121,22 @@ IDs, responses, and statuses matched history. The test stack was stopped afterwa
 
 Full evidence: `benchmarks/baselines/2026-11-05-qwen3-4b/`. This is a single-run
 local baseline, not a statistically validated model ranking or general accuracy score.
+
+## Dataset v2 and repeated local measurements
+
+Dataset v2 changes only the ambiguous literal-string prompt; expected values and
+the scorer stay unchanged. Explicit `datasetVersion` and dataset query `version`
+select v2, while missing/null request versions and the unparameterized dataset
+endpoint preserve v1. Tests verify v1's original hash and reject unknown versions
+before provider calls. The complete build passed 32 tests, including real
+PostgreSQL v2 report storage and retrieval after restart.
+
+Three actual local `qwen3:4b` v2 runs passed 10/10 each, with zero provider failures
+and all 30 attempts matched to saved history. Average durations per run were
+13394.5, 16816.5, and 16512.8 ms; combined average was 15574.6 ms. The model digest
+and Ollama version matched before and after measurement. No cloud calls or task
+retries were made. The stack was stopped after verification.
+
+Evidence and limitations: `benchmarks/baselines/2026-11-05-qwen3-4b-v2/`.
+These different-version samples do not establish a model improvement or general
+accuracy estimate; the original v1 reports are preserved unchanged.
