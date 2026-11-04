@@ -3,10 +3,10 @@
 Java backend for a future multi-model AI orchestration and evaluation platform.
 This repository is independent of ALFHA Agent.
 
-## Current scope: Milestone 1
+## Current scope: Milestone 2
 
 Implemented: Spring Boot application, JSON health endpoint, Java 21 Maven build,
-and an automated HTTP test. AI providers, generation, comparison, PostgreSQL,
+Ollama provider, generation endpoint, and automated tests. Cloud providers, comparison, PostgreSQL,
 Docker Compose, and CI belong to later milestones and are not implemented yet.
 
 ## Prerequisites
@@ -123,6 +123,49 @@ Keep `.env` files, credentials, downloaded tools, dependency caches, and build
 outputs out of Git. Make local commits after tested milestones. Remote pushes
 require explicit approval.
 
-Next: Milestone 2 — add the provider interface, Ollama adapter, `/api/generate`,
-timeouts, connection failure handling, and mocked provider tests. Real Ollama
-integration must be verified separately and reported explicitly.
+## Ollama generation
+
+Start Ollama separately (`ollama serve` if it is not already running), and install
+the default model with `ollama pull qwen3:4b`. The download may be several GB.
+The application never downloads models automatically.
+
+| Environment variable | Default | Purpose |
+| --- | --- | --- |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Trusted Ollama server origin |
+| `OLLAMA_MODEL` | `qwen3:4b` | Only accepted model identifier in this milestone |
+| `OLLAMA_TIMEOUT` | `120s` | Positive connection and complete request timeout |
+
+```powershell
+$body = @{ model = 'qwen3:4b'; prompt = 'Explain REST in one sentence.' } | ConvertTo-Json
+Invoke-RestMethod http://localhost:8080/api/generate -Method Post -ContentType 'application/json' -Body $body
+```
+
+Successful response (duration varies):
+
+```json
+{"model":"qwen3:4b","response":"...","durationMs":1234,"status":"SUCCESS","error":null}
+```
+
+The controller delegates to `GenerationService`, which validates input, checks the
+configured model, measures elapsed time with a monotonic clock, and invokes the
+`ModelProvider` contract. `OllamaProvider` uses Java's HTTP client with streaming
+disabled and no automatic redirects. It requires a completed response with a string
+`response` field. Prompts must contain non-whitespace text and be at most 32000 characters.
+
+Invalid JSON/input and unknown models return HTTP 400 with `{ "code": "...", "message": "..." }`.
+Provider failures return the generation envelope with `status: FAILED`, a null
+response, elapsed duration, and an `error` object using the same code/message shape.
+HTTP codes: timeout 504, connection failure/interruption 503, upstream rate limit
+429, other upstream errors/invalid responses 502. Raw upstream error bodies and
+exception messages are never returned. There are no retries or prompt logging.
+
+Tests use fake providers and a local stub HTTP server, including success, invalid
+input, upstream errors, malformed/incomplete responses, timeouts, and connection
+failure. They do not require real models, cloud credentials, or paid services.
+Real inference was also verified separately on November 5, 2026: the packaged
+application called the installed local `qwen3:4b` through `/api/generate` and
+returned `response: Hello`, `status: SUCCESS`, `error: null`, and `durationMs: 6540`.
+The temporary application process was stopped afterward. No model was downloaded.
+
+Next: Milestone 3 — OpenRouter integration with an environment-based key,
+configurable free model, provider selection, and tests without real cloud calls.
