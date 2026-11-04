@@ -1,0 +1,15 @@
+{
+  "id": "basics", "version": "2",
+  "tasks": [
+    {"id":"arithmetic","prompt":"What is 17 + 25? Reply with only the integer. /no_think","rule":"EXACT","expected":"42"},
+    {"id":"capital","prompt":"What is the capital of France? Reply with only the city name. /no_think","rule":"EXACT","expected":"Paris"},
+    {"id":"boolean","prompt":"Is 9 a prime number? Reply with only false in lowercase. /no_think","rule":"EXACT","expected":"false"},
+    {"id":"sorting","prompt":"Sort 3, 1, 2 ascending. Reply only with comma-separated integers without spaces. /no_think","rule":"EXACT","expected":"1,2,3"},
+    {"id":"json-object","prompt":"Return any valid JSON object. Do not use markdown or surrounding text. /no_think","rule":"JSON_OBJECT"},
+    {"id":"json-nested","prompt":"Return only a JSON object with book set to an object whose title is the string Example. /no_think","rule":"JSON_FIELDS","fields":{"book":{"title":"Example"}}},
+    {"id":"typed-fields","prompt":"Return only a JSON object with name set to Ada and age set to the number 37. /no_think","rule":"JSON_FIELDS","fields":{"name":"Ada","age":37}},
+    {"id":"boolean-field","prompt":"Return only a JSON object with active set to boolean true and count set to the number 3. /no_think","rule":"JSON_FIELDS","fields":{"active":true,"count":3}},
+    {"id":"array-field","prompt":"Return only a JSON object with numbers set to the array [1,2,3]. /no_think","rule":"JSON_FIELDS","fields":{"numbers":[1,2,3]}},
+    {"id":"null-field","prompt":"Return only a JSON object with value set to JSON null and label set to the literal JSON string \"empty\" (not an empty string). /no_think","rule":"JSON_FIELDS","fields":{"value":null,"label":"empty"}}
+  ]
+}

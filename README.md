@@ -12,6 +12,8 @@ Docker Compose and GitHub Actions are included. Real Ollama/OpenRouter generatio
 comparison, and saved history have been verified; see `docs/validation.md` for evidence.
 Milestone 7 adds a ten-task objective benchmark, saved reports, and per-model
 summaries. See [benchmark usage and scoring](docs/benchmarks.md).
+Dataset v2 clarifies the literal-string task while preserving v1. Use
+`datasetVersion: "2"` to select it; existing requests continue to use v1.
 
 ## Prerequisites
 

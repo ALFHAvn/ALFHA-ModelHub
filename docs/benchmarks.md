@@ -1,9 +1,39 @@
 # Milestone 7: objective benchmarks
 
-The bundled `basics` dataset, version `1`, contains ten fixed prompts for simple
+The bundled `basics` dataset, versions `1` and `2`, contains ten fixed prompts for simple
 arithmetic, factual answers, instruction following, and structured JSON output.
 This is a small regression dataset, not a validated general model-quality benchmark.
 No model is automatically declared the winner.
+
+Version 2 clarifies only the `null-field` prompt: the label must be the literal
+JSON string `"empty"`, not an empty string. Expected values and scoring rules are
+unchanged. V1, its hash, and all old reports are preserved. Missing or null
+`datasetVersion` defaults to `"1"` for backward compatibility; explicitly select
+`"2"` for new measurements. Other versions return HTTP 400 before any model call.
+
+```powershell
+$base = 'http://localhost:8080'
+Invoke-RestMethod "$base/api/benchmarks/dataset?version=2"
+$body = @{datasetId='basics'; datasetVersion='2'; models=@('qwen3:4b')} | ConvertTo-Json
+```
+
+Use `scripts/run-local-baselines.ps1` to run three sequential local repetitions of
+v2 (30 inference calls). It forces OpenRouter off, exports every retrieved report
+and runtime metadata under a timestamped `target/local-baselines-v2-*` directory,
+checks all results against saved history, and stops its isolated Compose stack.
+Provider defaults remain unchanged; the runner checks the model digest and Ollama
+version before and after the measurement. It does not reload the model between
+runs, control sampling, retry failed tasks, or make cloud calls.
+
+```powershell
+./scripts/run-local-baselines.ps1
+# Optional: repeat the original dataset instead.
+./scripts/run-local-baselines.ps1 -DatasetVersion 1 -Repetitions 3
+```
+
+Each repetition can take several minutes. Compare v1 and v2 as different prompt
+conditions, not as a controlled measure of improved model quality. Three runs are
+a small descriptive sample, not enough to establish statistical superiority.
 
 ## Run and inspect
 

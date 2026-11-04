@@ -46,3 +46,12 @@ Content-Type: application/json
 
 ### Saved benchmark (replace the UUID with the POST result's id)
 GET {{baseUrl}}/api/benchmarks/00000000-0000-0000-0000-000000000000
+
+### Clarified dataset v2
+GET {{baseUrl}}/api/benchmarks/dataset?version=2
+
+### Explicit v2 local benchmark
+POST {{baseUrl}}/api/benchmarks
+Content-Type: application/json
+
+{"datasetId":"basics","datasetVersion":"2","models":["qwen3:4b"]}

@@ -54,14 +54,18 @@ class BenchmarkIT {
                     var dataset = get(client, base + "/api/benchmarks/dataset");
                     assertEquals(200, dataset.statusCode());
                     assertEquals(10, mapper.readTree(dataset.body()).path("tasks").size());
+                    assertEquals("1", mapper.readTree(dataset.body()).path("version").asString());
+                    assertEquals("2", mapper.readTree(get(client, base + "/api/benchmarks/dataset?version=2").body()).path("version").asString());
+                    assertEquals(400, get(client, base + "/api/benchmarks/dataset?version=unknown").statusCode());
                     var created = client.send(HttpRequest.newBuilder(URI.create(base + "/api/benchmarks"))
                             .timeout(Duration.ofSeconds(30)).header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("{\"datasetId\":\"basics\",\"models\":[\"qwen3:4b\",\"vendor/model:free\"]}")).build(),
+                            .POST(HttpRequest.BodyPublishers.ofString("{\"datasetId\":\"basics\",\"datasetVersion\":\"2\",\"models\":[\"qwen3:4b\",\"vendor/model:free\"]}")).build(),
                             HttpResponse.BodyHandlers.ofString());
                     assertEquals(201, created.statusCode(), created.body());
                     reportJson = created.body();
                     reportPath = created.headers().firstValue("Location").orElseThrow();
                     var report = mapper.readTree(reportJson);
+                    assertEquals("2", report.path("dataset").path("version").asString());
                     assertEquals(20, report.path("results").size());
                     assertEquals(1, report.path("summaries").path(0).path("passed").asInt());
                     assertEquals(10, report.path("summaries").path(1).path("failed").asInt());

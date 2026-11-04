@@ -37,6 +37,7 @@ public class BenchmarkService {
                 || request.models().contains("openrouter/free"))
             throw new IllegalArgumentException("Choose basics and one or two distinct fixed model identifiers");
         var selected = List.copyOf(request.models());
+        var dataset = catalog.dataset(request.datasetVersion());
         for (String model : selected) generation.validate(new GenerateRequest(model, "validation"));
         if (repository == null) throw new IllegalStateException("Benchmark persistence is required");
         if (!slot.tryAcquire()) throw new BusyException();
@@ -50,7 +51,7 @@ public class BenchmarkService {
                         "Provider defaults; non-streaming; sampling settings and model weights are not pinned");
             }).toList();
             var results = new ArrayList<Result>();
-            for (var task : catalog.dataset().tasks()) {
+            for (var task : dataset.tasks()) {
                 var executions = selected.size() == 1
                         ? List.of(generation.generate(new GenerateRequest(selected.getFirst(), task.prompt())))
                         : comparison.compare(new CompareRequest(selected, task.prompt())).results();
@@ -60,8 +61,8 @@ public class BenchmarkService {
                     results.add(new Result(task.id(), execution, score));
                 }
             }
-            var report = new BenchmarkReport(UUID.randomUUID(), started, Instant.now(), catalog.hash(), "objective-v1",
-                    catalog.dataset(), configs, List.copyOf(results), selected.stream().map(model -> summarize(model, results)).toList());
+            var report = new BenchmarkReport(UUID.randomUUID(), started, Instant.now(), catalog.hash(dataset.version()), "objective-v1",
+                    dataset, configs, List.copyOf(results), selected.stream().map(model -> summarize(model, results)).toList());
             repository.save(report);
             return report;
         } finally { slot.release(); }

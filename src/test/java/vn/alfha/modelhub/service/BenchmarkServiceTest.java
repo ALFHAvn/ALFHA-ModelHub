@@ -68,6 +68,18 @@ class BenchmarkServiceTest {
         assertNull(summary.passRateAmongSuccessful());
         assertEquals(0.0, summary.passRateAllAttempts());
     }
+    @Test void executesTheExplicitVersionAndRejectsUnknownVersionsBeforeProviderCalls() throws Exception {
+        var prompts = new java.util.concurrent.CopyOnWriteArrayList<String>();
+        var service = service((model, prompt) -> { prompts.add(prompt); return "{}"; }, (model, prompt) -> "{}");
+        assertThrows(IllegalArgumentException.class,
+                () -> service.run(new BenchmarkRequest("basics", "unknown", List.of("qwen3:4b"))));
+        assertTrue(prompts.isEmpty());
+        var report = service.run(new BenchmarkRequest("basics", "2", List.of("qwen3:4b")));
+        assertEquals("2", report.dataset().version());
+        assertEquals(new BenchmarkCatalog(mapper).hash("2"), report.datasetSha256());
+        assertTrue(prompts.getLast().contains("not an empty string"));
+        assertEquals("objective-v1", report.scoringVersion());
+    }
     @Test void rejectsInvalidSelectionsBeforeAnyProviderCalls() throws Exception {
         var calls = new AtomicInteger();
         ModelProvider provider = (model, prompt) -> { calls.incrementAndGet(); return ""; };
