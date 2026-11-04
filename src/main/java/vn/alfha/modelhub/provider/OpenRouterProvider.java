@@ -23,7 +23,7 @@ public class OpenRouterProvider implements ModelProvider {
             @Value("${modelhub.openrouter.endpoint}") URI endpoint,
             @Value("${modelhub.openrouter.timeout}") Duration timeout,
             @Value("${modelhub.openrouter.api-key}") String key) {
-        boolean local = List.of("localhost", "127.0.0.1", "[::1]").contains(endpoint.getHost());
+        boolean local = "localhost".equals(endpoint.getHost()) || "127.0.0.1".equals(endpoint.getHost()) || "[::1]".equals(endpoint.getHost());
         if (endpoint.getHost() == null || !("https".equals(endpoint.getScheme())
                 || (local && "http".equals(endpoint.getScheme()))) || endpoint.getUserInfo() != null
                 || endpoint.getQuery() != null || endpoint.getFragment() != null)

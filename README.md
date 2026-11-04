@@ -3,12 +3,13 @@
 Java backend for a future multi-model AI orchestration and evaluation platform.
 This repository is independent of ALFHA Agent.
 
-## Current scope: Milestone 5
+## Current scope: Milestone 6
 
 Implemented: Spring Boot application, JSON health endpoint, Java 21 Maven build,
 Ollama and optional OpenRouter providers, model listing, generation, concurrent comparison,
 PostgreSQL execution history with Flyway migrations, and automated tests.
-Docker Compose and CI belong to Milestone 6 and are not implemented yet.
+Docker Compose and GitHub Actions are included. Real cloud verification and a
+remote CI run remain pending; see the acceptance record in `docs/validation.md`.
 
 ## Prerequisites
 
@@ -320,5 +321,77 @@ successful and failed execution storage, partial comparison persistence, paginat
 request-ID correlation, restart durability, and simulated write failure. AI responses
 remain stubbed; real cloud calls are not part of this test.
 
-Next: Milestone 6 — Docker Compose, GitHub Actions, delivery documentation, and
-MVP reliability review.
+## Docker Compose quick start
+
+Docker Desktop must be running Linux containers. You do not need a host JDK,
+Maven, or PostgreSQL for this path. Ollama runs separately on the host.
+
+```powershell
+Copy-Item .env.example .env
+# Edit .env and set DATABASE_PASSWORD to a unique local password.
+docker compose up --build --wait
+Invoke-RestMethod http://localhost:8080/api/health
+Invoke-RestMethod http://localhost:8080/api/models
+```
+
+Compose reads `.env` and passes the selected values to the containers. It refuses
+startup with an empty database password. PostgreSQL is private to the Compose
+network, and the HTTP port is published only on host loopback. The app runs as a
+non-root user, waits for the database health check, then applies Flyway migrations.
+`APP_PORT` changes the published host port; the container always listens on 8080.
+
+The default Ollama URL is `http://host.docker.internal:11434`, with a host-gateway
+mapping for Linux. Verify that Ollama is reachable from Docker. If it binds only
+to loopback and your Docker host cannot forward to it, configure Ollama to listen
+on a host interface reachable from Docker, restrict access with your host firewall,
+and set `OLLAMA_BASE_URL` accordingly. The application does not install Ollama or
+download models automatically. For local generation, install `qwen3:4b` separately.
+
+Useful commands:
+
+```shell
+docker compose ps
+docker compose logs --tail=100 app
+docker compose stop
+docker compose start
+docker compose down
+```
+
+`down` removes containers and the network but preserves the named database volume.
+Do not add `--volumes` unless you intend to erase that database. A changed database
+password in `.env` does not change the role password in an already initialized
+volume; update the existing role through PostgreSQL before changing the app login.
+For a host-Java setup, use the earlier database instructions and set process
+environment variables yourself; `.env` is only read by Compose.
+
+## CI and examples
+
+`.github/workflows/ci.yml` runs on pushes, pull requests, and manual dispatch. It
+uses Java 21 on Ubuntu, runs `mvn clean verify` (including real PostgreSQL
+Testcontainers tests), builds the Docker image, validates Compose, and uploads
+test reports. Official actions are pinned to commit hashes and repository
+permissions are read-only. No cloud key is needed; no deployment or image push is
+configured. The workflow has not run on GitHub until this commit is pushed.
+
+`examples/requests.http` contains health, model listing, local/cloud generation,
+comparison, history, and invalid-input requests. Replace its cloud placeholder
+with your configured ID. The PowerShell examples above work without an editor
+HTTP extension.
+
+## Reliability and scope
+
+Provider calls have explicit connection/request timeouts, no automatic retries,
+no automatic code execution, no paid-model fallback, and sanitized errors.
+PostgreSQL connection, socket, and query timeouts bound common database outages.
+Expected HTTP errors preserve 400/404/405/415 status codes and the code/message
+error shape. The application health endpoint is liveness only; database migration
+must succeed at startup, but a later database outage does not change that endpoint.
+
+This MVP is for trusted local use. Authentication, authorization, inbound rate
+limits, global concurrency limits, retention/deletion policies, backups, and TLS
+termination are outside the implemented scope. Model prompts and answers are
+stored as submitted. Never include secrets in prompts. Do not expose the service
+publicly without access controls. No model quality ranking is performed.
+
+All six implementation milestones are present. Use `docs/validation.md` to see
+what was verified locally and what still needs real-service or GitHub validation.

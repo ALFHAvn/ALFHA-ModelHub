@@ -1,0 +1,36 @@
+@baseUrl = http://localhost:8080
+# Replace this placeholder with a currently configured free model from /api/models.
+@cloudModel = vendor/model:free
+
+### Health
+GET {{baseUrl}}/api/health
+
+### Configured models
+GET {{baseUrl}}/api/models
+
+### Local generation
+POST {{baseUrl}}/api/generate
+Content-Type: application/json
+
+{"model":"qwen3:4b","prompt":"Explain REST in one sentence. /no_think"}
+
+### Cloud generation (configure OpenRouter environment first)
+POST {{baseUrl}}/api/generate
+Content-Type: application/json
+
+{"model":"{{cloudModel}}","prompt":"Explain REST in one sentence."}
+
+### Comparison (configure two models first)
+POST {{baseUrl}}/api/compare
+Content-Type: application/json
+
+{"models":["qwen3:4b","{{cloudModel}}"],"prompt":"Explain REST in one sentence."}
+
+### History
+GET {{baseUrl}}/api/runs?page=0&size=20
+
+### Expected validation error
+POST {{baseUrl}}/api/generate
+Content-Type: application/json
+
+{"model":"qwen3:4b","prompt":" "}
