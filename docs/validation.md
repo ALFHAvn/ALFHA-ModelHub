@@ -108,3 +108,16 @@ partial model failure, execution-ID correlation, and report retrieval after
 restart were verified against actual PostgreSQL containers. AI responses for
 these checks were simulated; no real ten-task benchmark scores are claimed.
 See `docs/benchmarks.md` for scoring semantics, limits, and run/export examples.
+
+## First real local benchmark baseline
+
+On November 5, 2026, the `basics` v1 benchmark ran against actual local
+`qwen3:4b` with OpenRouter explicitly disabled. All ten provider calls succeeded;
+nine passed their scoring rule. The failure returned `label: ""` where the rule
+expected the literal string `"empty"`; the potentially ambiguous prompt is noted
+in the analysis without modifying the original dataset. Average provider duration
+was 14880.7 ms. The saved report was retrieved from PostgreSQL and all ten execution
+IDs, responses, and statuses matched history. The test stack was stopped afterward.
+
+Full evidence: `benchmarks/baselines/2026-11-05-qwen3-4b/`. This is a single-run
+local baseline, not a statistically validated model ranking or general accuracy score.

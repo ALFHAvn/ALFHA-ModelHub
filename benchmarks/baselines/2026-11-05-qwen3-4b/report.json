@@ -1,0 +1,245 @@
+{
+  "id": "3df0f2b5-ac19-4512-b636-49bf43be3bef",
+  "startedAt": "2026-11-04T19:46:21.348396034Z",
+  "completedAt": "2026-11-04T19:48:50.860597212Z",
+  "datasetSha256": "6de7890d47a885fc17f703d0b1a07970395f66640906a783ffd2498de467917e",
+  "scoringVersion": "objective-v1",
+  "dataset": {
+    "id": "basics",
+    "version": "1",
+    "tasks": [
+      {
+        "id": "arithmetic",
+        "prompt": "What is 17 + 25? Reply with only the integer. /no_think",
+        "rule": "EXACT",
+        "expected": "42",
+        "fields": null
+      },
+      {
+        "id": "capital",
+        "prompt": "What is the capital of France? Reply with only the city name. /no_think",
+        "rule": "EXACT",
+        "expected": "Paris",
+        "fields": null
+      },
+      {
+        "id": "boolean",
+        "prompt": "Is 9 a prime number? Reply with only false in lowercase. /no_think",
+        "rule": "EXACT",
+        "expected": "false",
+        "fields": null
+      },
+      {
+        "id": "sorting",
+        "prompt": "Sort 3, 1, 2 ascending. Reply only with comma-separated integers without spaces. /no_think",
+        "rule": "EXACT",
+        "expected": "1,2,3",
+        "fields": null
+      },
+      {
+        "id": "json-object",
+        "prompt": "Return any valid JSON object. Do not use markdown or surrounding text. /no_think",
+        "rule": "JSON_OBJECT",
+        "expected": null,
+        "fields": null
+      },
+      {
+        "id": "json-nested",
+        "prompt": "Return only a JSON object with book set to an object whose title is the string Example. /no_think",
+        "rule": "JSON_FIELDS",
+        "expected": null,
+        "fields": {
+          "book": {
+            "title": "Example"
+          }
+        }
+      },
+      {
+        "id": "typed-fields",
+        "prompt": "Return only a JSON object with name set to Ada and age set to the number 37. /no_think",
+        "rule": "JSON_FIELDS",
+        "expected": null,
+        "fields": {
+          "age": 37,
+          "name": "Ada"
+        }
+      },
+      {
+        "id": "boolean-field",
+        "prompt": "Return only a JSON object with active set to boolean true and count set to the number 3. /no_think",
+        "rule": "JSON_FIELDS",
+        "expected": null,
+        "fields": {
+          "count": 3,
+          "active": true
+        }
+      },
+      {
+        "id": "array-field",
+        "prompt": "Return only a JSON object with numbers set to the array [1,2,3]. /no_think",
+        "rule": "JSON_FIELDS",
+        "expected": null,
+        "fields": {
+          "numbers": [
+            1,
+            2,
+            3
+          ]
+        }
+      },
+      {
+        "id": "null-field",
+        "prompt": "Return only a JSON object with value set to JSON null and label set to the string empty. /no_think",
+        "rule": "JSON_FIELDS",
+        "expected": null,
+        "fields": {
+          "label": "empty",
+          "value": null
+        }
+      }
+    ]
+  },
+  "models": [
+    {
+      "model": "qwen3:4b",
+      "provider": "ollama",
+      "timeout": "120s",
+      "inferenceSettings": "Provider defaults; non-streaming; sampling settings and model weights are not pinned"
+    }
+  ],
+  "results": [
+    {
+      "taskId": "arithmetic",
+      "execution": {
+        "requestId": "6f19472f-2bf3-4a28-afd7-ddb19a674593",
+        "model": "qwen3:4b",
+        "response": "42",
+        "durationMs": 11480,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "capital",
+      "execution": {
+        "requestId": "8f48ad85-e5a3-440b-96a7-ad4296bbdccc",
+        "model": "qwen3:4b",
+        "response": "Paris",
+        "durationMs": 2538,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "boolean",
+      "execution": {
+        "requestId": "9c069cfa-c258-4236-9cf1-8116ecb5f913",
+        "model": "qwen3:4b",
+        "response": "false",
+        "durationMs": 5235,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "sorting",
+      "execution": {
+        "requestId": "82654774-98c6-46f3-a116-fc696bc4bdee",
+        "model": "qwen3:4b",
+        "response": "1,2,3",
+        "durationMs": 10700,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "json-object",
+      "execution": {
+        "requestId": "04d9a798-ddf8-4254-8e62-266083cee575",
+        "model": "qwen3:4b",
+        "response": "{\"status\":\"ok\"}",
+        "durationMs": 29542,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "json-nested",
+      "execution": {
+        "requestId": "d4d7ef0b-3e16-48e6-9df7-cdd9ef495bc3",
+        "model": "qwen3:4b",
+        "response": "{\"book\":{\"title\":\"Example\"}}",
+        "durationMs": 18023,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "typed-fields",
+      "execution": {
+        "requestId": "2d564eba-8e8d-4680-8a0f-b51ab04a4fd8",
+        "model": "qwen3:4b",
+        "response": "{\"name\":\"Ada\",\"age\":37}",
+        "durationMs": 19164,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "boolean-field",
+      "execution": {
+        "requestId": "ca1ef0fd-9291-4e6a-bc8e-3d3eb3d206a8",
+        "model": "qwen3:4b",
+        "response": "{\"active\":true,\"count\":3}",
+        "durationMs": 21088,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "array-field",
+      "execution": {
+        "requestId": "9b15e2be-02af-4626-8500-46a1952bb248",
+        "model": "qwen3:4b",
+        "response": "{\"numbers\": [1,2,3]}",
+        "durationMs": 10881,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "PASS"
+    },
+    {
+      "taskId": "null-field",
+      "execution": {
+        "requestId": "6e1257dd-42e7-4c89-b0db-753f0949e6b5",
+        "model": "qwen3:4b",
+        "response": "{\"value\":null,\"label\":\"\"}",
+        "durationMs": 20156,
+        "status": "SUCCESS",
+        "error": null
+      },
+      "score": "FAIL"
+    }
+  ],
+  "summaries": [
+    {
+      "model": "qwen3:4b",
+      "attempted": 10,
+      "successful": 10,
+      "failed": 0,
+      "passed": 9,
+      "scoringFailures": 1,
+      "passRateAmongSuccessful": 0.9,
+      "passRateAllAttempts": 0.9,
+      "averageSuccessfulDurationMs": 14880.7
+    }
+  ]
+}

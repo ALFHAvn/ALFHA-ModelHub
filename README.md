@@ -418,5 +418,6 @@ One local model is enough to start. To compare providers, configure a specific
 available OpenRouter `vendor/model:free` ID and include it as the second model.
 `openrouter/free` is rejected for benchmarks because it can change the selected
 model across calls. Do not change your key or enable paid models for this feature.
-Automated benchmark tests use simulated AI responses and real PostgreSQL; no real
-ten-task benchmark has been claimed as completed.
+Automated benchmark tests use simulated AI responses and real PostgreSQL. A
+separate [real local baseline](benchmarks/baselines/2026-11-05-qwen3-4b/README.md)
+completed all ten executions: nine scoring passes and one literal-string mismatch.

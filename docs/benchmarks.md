@@ -121,5 +121,7 @@ rejection, provider failures, aggregate denominators, selection validation, and
 concurrency limits. PostgreSQL Testcontainers tests upgrade from V1, preserve
 existing history, save partial-failure reports, correlate execution IDs, and
 retrieve reports after an application restart. All AI calls in these tests use
-fake providers or local HTTP stubs. Real benchmark quality scores have not been
-measured or claimed by this implementation milestone.
+fake providers or local HTTP stubs. Separately, the
+[first real local baseline](../benchmarks/baselines/2026-11-05-qwen3-4b/README.md)
+completed all ten tasks with nine scoring passes. Its report, runtime metadata,
+history correlation evidence, and failed-task analysis are preserved alongside it.
