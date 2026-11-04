@@ -14,6 +14,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $projectRoot '.env'))) {
 $savedPort = $env:APP_PORT
 $savedEnabled = $env:OPENROUTER_ENABLED
 $started = $false
+$stage = 'Compose configuration'
 Push-Location $projectRoot
 try {
     $env:APP_PORT = "$Port"
@@ -23,21 +24,26 @@ try {
     docker compose -p $ProjectName config --quiet
     if ($LASTEXITCODE -ne 0) { throw 'Compose configuration is invalid.' }
     $started = $true
+    $stage = 'Compose startup'
     docker compose -p $ProjectName up --build --detach --wait --wait-timeout 180
     if ($LASTEXITCODE -ne 0) { throw 'Compose startup failed.' }
 
     $base = "http://localhost:$Port"
-    $models = @(Invoke-RestMethod "$base/api/models" -TimeoutSec 10)
+    $stage = 'Model selection'
+    $modelResponse = Invoke-RestMethod "$base/api/models" -TimeoutSec 10
+    $models = @($modelResponse)
     $local = @($models | Where-Object provider -eq 'ollama')
     $cloud = @($models | Where-Object provider -eq 'openrouter')
     if ($local.Count -ne 1 -or $cloud.Count -ne 1) { throw 'Expected one configured local model and one free cloud model.' }
     $prompt = 'Reply with one short sentence defining REST. /no_think'
     $generationBody = @{model = $cloud[0].model; prompt = $prompt} | ConvertTo-Json
+    $stage = 'OpenRouter generation'
     $generation = Invoke-RestMethod "$base/api/generate" -Method Post -ContentType 'application/json' -Body $generationBody -TimeoutSec 180
     if ($generation.status -ne 'SUCCESS' -or [string]::IsNullOrWhiteSpace($generation.response)) {
         throw 'Cloud generation did not return a successful text response.'
     }
     $comparisonBody = @{models = @($local[0].model, $cloud[0].model); prompt = $prompt} | ConvertTo-Json
+    $stage = 'Real model comparison'
     $comparison = Invoke-RestMethod "$base/api/compare" -Method Post -ContentType 'application/json' -Body $comparisonBody -TimeoutSec 180
     if (@($comparison.results).Count -ne 2) { throw 'Expected two comparison results.' }
     foreach ($run in $comparison.results) {
@@ -45,6 +51,7 @@ try {
             throw 'Both providers must succeed for the real comparison acceptance check.'
         }
     }
+    $stage = 'History correlation'
     $history = Invoke-RestMethod "$base/api/runs?page=0&size=100" -TimeoutSec 15
     $verified = @($generation) + @($comparison.results)
     foreach ($run in $verified) {
@@ -66,7 +73,7 @@ try {
     Write-Output 'Evidence: target/cloud-validation.json (contains no key or response text).'
 } catch {
     # Avoid printing arbitrary upstream/command exceptions that could contain secrets.
-    Write-Output 'Cloud validation did not pass. Check provider configuration, free-model availability, and local Ollama connectivity; do not share credentials.'
+    Write-Output "Cloud validation did not pass at stage: $stage. Check provider configuration, free-model availability, and local Ollama connectivity; do not share credentials."
     throw 'Acceptance checks remain pending; no release tag was created.'
 } finally {
     if ($started) {

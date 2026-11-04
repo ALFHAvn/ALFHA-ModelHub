@@ -9,7 +9,7 @@ kept separate from implementation status.
 | Common provider interface | Ollama and OpenRouter implement `ModelProvider` |
 | Configurable models | `/api/models`, registry tests, environment configuration |
 | Local Ollama generation | Real installed `qwen3:4b` returned `Hello` in Milestone 2 |
-| Optional cloud provider | Adapter and routing verified with local HTTP stubs; no real OpenRouter call |
+| Optional cloud provider | Stub tests plus real `openrouter/free` generation succeeded during release acceptance |
 | Concurrent comparison | Latch test requires both providers to start before either completes |
 | Partial failures | Both result positions, timeouts, both-failed case, and HTTP partial failure tested |
 | PostgreSQL history | Real PostgreSQL 17 Testcontainer: migration, success/failure saves, comparison, pagination, restart durability |
@@ -25,10 +25,9 @@ does not skip silently when Docker is unavailable. It does not touch a user's
 existing database. Reports are in `target/surefire-reports` and
 `target/failsafe-reports` after a full build.
 
-Real OpenRouter generation and a real two-provider comparison remain unverified.
-A configured free cloud ID is not a guarantee of live availability. To finish
-those manual acceptance checks, configure your own key and a current free model,
-then use the requests in `examples/requests.http`. Never commit the key.
+Real OpenRouter generation, Ollama–OpenRouter comparison, and matching saved
+history all passed during release acceptance. A configured free cloud ID is not
+a guarantee of future availability. Credentials stayed in the ignored `.env`.
 
 ## Local delivery smoke check
 
@@ -52,7 +51,29 @@ Completed locally on November 5, 2026:
 
 The Milestone 6 local checks made no cloud calls or deployments. The completed
 milestones were subsequently pushed at the user's request, and Java CI passed
-on GitHub. Real cloud checks remain pending.
+on GitHub. Real cloud checks subsequently passed as recorded below.
+
+## Real-service release acceptance
+
+On November 5, 2026 (Asia/Saigon), `scripts/verify-cloud.ps1` passed with:
+
+| Execution | Model | Duration | Result |
+| --- | --- | --- | --- |
+| Standalone cloud generation | `openrouter/free` | 4617 ms | SUCCESS |
+| Comparison local execution | `qwen3:4b` | 38942 ms | SUCCESS |
+| Comparison cloud execution | `openrouter/free` | 744 ms | SUCCESS |
+
+All three UUIDs and response texts matched records retrieved from PostgreSQL
+history. The stack was stopped afterward, preserving its isolated database volume.
+The local evidence file `target/cloud-validation.json` contains execution IDs,
+model IDs, statuses, and timings, without credentials or response text.
+The tested application source matches commit `bd7595e`; the acceptance script
+had the model-array handling correction included in this release commit.
+
+The initial attempt stopped before any provider request because the script wrapped
+PowerShell's REST array response incorrectly. This was reproduced locally and
+fixed by assigning the response before enumerating it. The successful run above
+used the corrected script. No paid model or automatic fallback was requested.
 
 ## Completing real cloud acceptance
 

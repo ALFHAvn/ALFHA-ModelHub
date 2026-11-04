@@ -8,8 +8,8 @@ This repository is independent of ALFHA Agent.
 Implemented: Spring Boot application, JSON health endpoint, Java 21 Maven build,
 Ollama and optional OpenRouter providers, model listing, generation, concurrent comparison,
 PostgreSQL execution history with Flyway migrations, and automated tests.
-Docker Compose and GitHub Actions are included. Real cloud verification and a
-real two-provider comparison remain pending; see the acceptance record in `docs/validation.md`.
+Docker Compose and GitHub Actions are included. Real Ollama/OpenRouter generation,
+comparison, and saved history have been verified; see `docs/validation.md` for evidence.
 
 ## Prerequisites
 
@@ -213,8 +213,8 @@ no provider-specific routing. Existing Ollama requests keep the same format.
 OpenRouter tests use loopback HTTP stubs and fake keys. They cover authenticated
 chat payloads, provider selection, public model listing, paid-model rejection,
 missing credentials, rate limits, upstream failures, invalid responses, timeouts,
-and connection failures. No real OpenRouter call has been made, so real cloud
-integration remains unverified. Local Ollama was verified in Milestone 2 as above.
+and connection failures. Separate real-service acceptance checks also passed for
+OpenRouter, Ollama comparison, and saved history; see the validation record.
 
 Reference: [OpenRouter chat API](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion)
 and [free variants](https://openrouter.ai/docs/guides/routing/model-variants/free).
@@ -256,8 +256,8 @@ HTTP failure codes. Both endpoints use the same prompt length limit.
 Concurrency tests use a latch that requires both fake providers to enter before
 either can finish. Other tests cover failures/timeouts in either position, both
 failures, input rejection before provider calls, result ordering, and real HTTP
-requests against local Ollama/OpenRouter stubs. Real two-provider comparison has
-not been verified; no cloud calls were made during this milestone.
+requests against local Ollama/OpenRouter stubs. Real two-provider comparison was
+subsequently verified separately during release acceptance.
 
 ## Execution history
 
