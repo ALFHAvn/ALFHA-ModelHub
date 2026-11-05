@@ -46,8 +46,10 @@ digests and provenance, configuration changes require clearing the selection
 and advancing an operator-controlled evidence cutoff before gathering new data.
 
 Deduplicate report IDs and verify dataset ID, version, hash, scorer, model
-IDs, provider, and recorded request timeout. Recompute the dataset snapshot
-hash and compare it with the registered dataset hash. Use only complete paired reports
+IDs, provider, and recorded request timeout. Compare the decoded dataset
+snapshot with the registered dataset and check the stored hash separately.
+This accounts for JSONB reordering object keys during storage.
+Use only complete paired reports
 with one terminal row per profile task per candidate. For this policy version,
 use the same unpaced, single-attempt condition with no skipped tasks. Keep
 scheduled reports separate until a policy explicitly supports them. Reject
@@ -186,3 +188,29 @@ overfit. Keep route explanations auditable and retain explicit model choice.
 tests, including two disposable PostgreSQL integration tests. The run used stub
 model providers. The optional real Docker coding integration path was outside
 this documentation-only checkpoint.
+
+## 9B preview
+
+The preview is opt-in. Start the host application with the usual database and
+provider configuration and add these flags. Substitute UUIDs from trusted
+live reports in the current PostgreSQL database. Choose the cutoff to match
+the current model and deployment configuration.
+
+```text
+--modelhub.routing.preview.enabled=true
+--modelhub.routing.preview.cutoff=2026-11-06T00:00:00Z
+--modelhub.routing.preview.report-ids=<uuid1>,<uuid2>,<uuid3>
+```
+
+Request `GET /api/routing/preview?profile=basic`. The API reads only the
+configured UUIDs and returns a recommendation with counts and reasons.
+Cloud entries are diagnostic and carry `CLOUD_NOT_VERIFIED`. A missing UUID
+is an exclusion. A database read or decoding failure causes a local fallback
+or `NO_ROUTE`. Omitting the cutoff prevents reports from qualifying.
+Preview is read-only and uses the same trusted-local deployment assumptions
+as the benchmark API.
+
+Verification ran with `mvn -Dmaven.repo.local=.m2/repository -B -ntp verify`.
+All 39 tests passed, including two disposable PostgreSQL integration tests.
+The preview integration test verifies approved report lookup, local fallback,
+missing and unreadable report handling, and zero provider calls.

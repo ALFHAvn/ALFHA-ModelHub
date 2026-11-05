@@ -64,6 +64,7 @@ class BenchmarkIT {
                 try (var context = new SpringApplicationBuilder(ModelHubApplication.class).run(args);
                      var client = HttpClient.newHttpClient()) {
                     String base = base(context);
+                    assertEquals(404, get(client, base + "/api/routing/preview?profile=basic").statusCode());
                     assertEquals(503, coding(client, base).statusCode());
                     assertEquals(0, calls.get());
                     var dataset = get(client, base + "/api/benchmarks/dataset");
@@ -154,14 +155,46 @@ class BenchmarkIT {
                             mapper.writeValueAsString(legacy), legacy.path("id").asString());
                 }
                 boolean realCodingRunner = Boolean.getBoolean("modelhub.test.coding-docker");
-                String[] restartArgs = java.util.Arrays.copyOf(args, args.length + 1);
+                String[] restartArgs = java.util.Arrays.copyOf(args, args.length + 4);
                 restartArgs[args.length] = "--modelhub.coding.runner=" + (realCodingRunner
                         ? "scripts/run-java-coding-pilot.ps1" : "target/nonexistent-coding-runner.ps1");
+                String approvedId = mapper.readTree(reportJson).path("id").asString();
+                String missingId = java.util.UUID.randomUUID().toString();
+                restartArgs[args.length + 1] = "--modelhub.routing.preview.enabled=true";
+                restartArgs[args.length + 2] = "--modelhub.routing.preview.cutoff=2020-01-01T00:00:00Z";
+                restartArgs[args.length + 3] = "--modelhub.routing.preview.report-ids=" + approvedId + "," + missingId;
                 try (var restarted = new SpringApplicationBuilder(ModelHubApplication.class).run(restartArgs);
                      var client = HttpClient.newHttpClient()) {
                     var retrieved = get(client, base(restarted) + reportPath);
                     assertEquals(200, retrieved.statusCode());
                     assertEquals(mapper.readTree(reportJson), mapper.readTree(retrieved.body()));
+                    int callsBeforePreview = calls.get();
+                    String previewUrl = base(restarted) + "/api/routing/preview?profile=";
+                    var preview = get(client, previewUrl + "basic");
+                    assertEquals(200, preview.statusCode(), preview.body());
+                    var decision = mapper.readTree(preview.body());
+                    assertEquals("FALLBACK_LOCAL", decision.path("outcome").asString());
+                    assertEquals("qwen3:4b", decision.path("selectedModel").asString());
+                    assertEquals(1, decision.path("reportIds").size());
+                    assertEquals(approvedId, decision.path("reportIds").path(0).asString());
+                    assertEquals(missingId, decision.path("exclusions").path(0).path("reportId").asString());
+                    assertEquals("REPORT_NOT_FOUND", decision.path("exclusions").path(0).path("reason").asString());
+                    assertEquals(10, decision.path("candidates").path(1).path("metrics").path("providerFailures").asInt());
+                    assertFalse(preview.body().contains("private-error-body"));
+                    assertFalse(preview.body().contains("fake-secret"));
+                    assertEquals(400, get(client, previewUrl + "unknown").statusCode());
+                    assertEquals(400, get(client, base(restarted) + "/api/routing/preview").statusCode());
+                    jdbc.update("UPDATE benchmark_reports SET report = '[]'::jsonb WHERE id = ?::uuid", approvedId);
+                    try {
+                        var unreadable = get(client, previewUrl + "basic");
+                        assertEquals(200, unreadable.statusCode(), unreadable.body());
+                        var fallback = mapper.readTree(unreadable.body());
+                        assertEquals("FALLBACK_LOCAL", fallback.path("outcome").asString());
+                        assertEquals("EVIDENCE_UNAVAILABLE", fallback.path("reason").asString());
+                    } finally {
+                        jdbc.update("UPDATE benchmark_reports SET report = ?::jsonb WHERE id = ?::uuid", reportJson, approvedId);
+                    }
+                    assertEquals(callsBeforePreview, calls.get());
                     assertEquals(1L, jdbc.queryForObject("SELECT count(*) FROM execution_runs WHERE model='legacy-model'", Long.class));
                     localAnswer.set("""
                             public class Main {
