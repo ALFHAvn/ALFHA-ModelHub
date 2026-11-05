@@ -1,9 +1,14 @@
 package vn.alfha.modelhub.service;
 
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 import vn.alfha.modelhub.dto.ApiError;
@@ -12,6 +17,9 @@ import vn.alfha.modelhub.dto.BenchmarkReport.ModelConfig;
 import vn.alfha.modelhub.dto.BenchmarkReport.Result;
 import vn.alfha.modelhub.dto.BenchmarkSchedule;
 import vn.alfha.modelhub.dto.GenerateResponse;
+import vn.alfha.modelhub.provider.OllamaProvider;
+import vn.alfha.modelhub.provider.OpenRouterProvider;
+import vn.alfha.modelhub.repository.BenchmarkRepository;
 import vn.alfha.modelhub.service.RoutingPolicy.*;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -104,12 +112,12 @@ class RoutingPolicyTest {
         assertEquals(CLOUD.model(), decision.selectedModel());
         assertEquals(fresh.observedAt(), decision.candidates().getLast().pricingObservedAt());
         var dispatch = new RoutingPolicy().evaluate(NOW, CUTOFF, catalog.dataset("2"), catalog.hash("2"),
-                List.of(LOCAL, checked(fresh)), reports, List.of(), true);
+                List.of(LOCAL, checked(fresh)), reports, List.of(), Mode.LOCAL_DISPATCH);
         assertEquals(LOCAL.model(), dispatch.selectedModel());
         assertEquals("EVIDENCE_SELECTED", dispatch.outcome());
         assertEquals(List.of("CLOUD_DISPATCH_DISABLED"), dispatch.candidates().getLast().reasons());
         var noLocal = new RoutingPolicy().evaluate(NOW, CUTOFF, catalog.dataset("2"), catalog.hash("2"),
-                List.of(checked(fresh)), reports, List.of(), true);
+                List.of(checked(fresh)), reports, List.of(), Mode.LOCAL_DISPATCH);
         assertEquals("NO_ROUTE", noLocal.outcome());
         assertNull(noLocal.selectedModel());
         for (var check : List.of(
@@ -119,6 +127,43 @@ class RoutingPolicyTest {
                 new OpenRouterPricing.Check(CLOUD.model(), NOW, "CLOUD_NONZERO_PRICE"))) {
             assertEquals(LOCAL.model(), preview(List.of(LOCAL, checked(check)), reports).selectedModel());
         }
+    }
+
+    @Test void dispatchRequiresOptInAndRechecksPricingForEachRequest() {
+        var mapper = new ObjectMapper();
+        var completed = Instant.now().minusSeconds(15);
+        var reports = List.of(report(1, completed, 0), report(2, completed, 0), report(3, completed, 0));
+        var repository = new BenchmarkRepository(null, mapper) {
+            @Override public Optional<BenchmarkReport> find(UUID id) {
+                return reports.stream().filter(report -> id.equals(report.id())).findFirst();
+            }
+        };
+        var pricingCalls = new AtomicInteger();
+        var pricing = new OpenRouterPricing(mapper, OpenRouterProvider.OFFICIAL_ENDPOINT, () -> {
+            int requestFee = pricingCalls.getAndIncrement();
+            return """
+                    {"data":[{"id":"vendor/model:free","pricing":{"prompt":"0","completion":"0","request":"%d"}}]}
+                    """.formatted(requestFee).getBytes(StandardCharsets.UTF_8);
+        });
+        // Routing reads only the registry's model metadata.
+        var registry = new ModelRegistry(
+                new OllamaProvider(mapper, URI.create("http://localhost:11434"), Duration.ofSeconds(1)),
+                new OpenRouterProvider(mapper, URI.create(OpenRouterProvider.OFFICIAL_ENDPOINT),
+                        Duration.ofSeconds(1), ""),
+                LOCAL.model(), true, CLOUD.model());
+        String ids = String.join(",", reports.stream().map(report -> report.id().toString()).toList());
+        var disabled = new RoutingPreview(catalog, repository, registry, LOCAL.timeout(), CLOUD.timeout(), ids,
+                completed.minusSeconds(60).toString(), false, false, pricing);
+        assertEquals(LOCAL.model(), disabled.dispatch("basic").selectedModel());
+        var enabled = new RoutingPreview(catalog, repository, registry, LOCAL.timeout(), CLOUD.timeout(), ids,
+                completed.minusSeconds(60).toString(), false, true, pricing);
+        assertEquals(LOCAL.model(), enabled.preview("basic").selectedModel());
+        assertEquals(0, pricingCalls.get());
+        assertEquals(CLOUD.model(), enabled.dispatch("basic").selectedModel());
+        var repriced = enabled.dispatch("basic");
+        assertEquals(LOCAL.model(), repriced.selectedModel());
+        assertEquals(List.of("CLOUD_NONZERO_PRICE"), repriced.candidates().getLast().reasons());
+        assertEquals(2, pricingCalls.get());
     }
 
     private Candidate checked(OpenRouterPricing.Check check) {

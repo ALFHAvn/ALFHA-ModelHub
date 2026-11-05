@@ -17,6 +17,7 @@ import vn.alfha.modelhub.exception.ProviderException;
 
 @Component
 public class OpenRouterProvider implements ModelProvider {
+    public static final String OFFICIAL_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
     private final ObjectMapper mapper;
     private final HttpClient client;
     private final URI endpoint;
@@ -48,13 +49,32 @@ public class OpenRouterProvider implements ModelProvider {
     @Override
     public String generate(String model, String prompt) {
         if (!isFreeModel(model)) throw failure("CONFIGURATION_ERROR", "Only free OpenRouter model identifiers are allowed");
+        return generate(model, prompt, false);
+    }
+
+    public String generateWithZeroPriceCeiling(String model, String prompt) {
+        if (!OFFICIAL_ENDPOINT.equals(endpoint.toString()) || !isFreeModel(model) || "openrouter/free".equals(model))
+            throw failure("CONFIGURATION_ERROR", "Routed cloud generation requires the official endpoint and a fixed free model");
+        return generate(model, prompt, true);
+    }
+
+    static Map<String, Object> requestBody(String model, String prompt, boolean zeroPriceCeiling) {
+        Map<String, Object> body = new java.util.HashMap<>(Map.of("model", model, "stream", false,
+                "messages", List.of(Map.of("role", "user", "content", prompt))));
+        if (zeroPriceCeiling) {
+            body.put("provider", Map.of("allow_fallbacks", false,
+                    "max_price", Map.of("prompt", 0, "completion", 0, "request", 0, "image", 0)));
+        }
+        return body;
+    }
+
+    private String generate(String model, String prompt, boolean zeroPriceCeiling) {
         if (key.isBlank()) throw failure("CONFIGURATION_ERROR", "OpenRouter credentials are not configured");
         try {
             var request = HttpRequest.newBuilder(endpoint).timeout(timeout)
                     .header("Authorization", "Bearer " + key).header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(Map.of(
-                            "model", model, "stream", false,
-                            "messages", List.of(Map.of("role", "user", "content", prompt)))))).build();
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                            mapper.writeValueAsString(requestBody(model, prompt, zeroPriceCeiling)))).build();
             var response = client.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 429) {
                 Long delay = response.headers().firstValue("Retry-After")

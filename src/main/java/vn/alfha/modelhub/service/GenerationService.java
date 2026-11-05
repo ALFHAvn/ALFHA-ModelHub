@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import vn.alfha.modelhub.dto.*;
 import vn.alfha.modelhub.provider.ModelProvider;
+import vn.alfha.modelhub.provider.OpenRouterProvider;
 import vn.alfha.modelhub.exception.ProviderException;
 
 @Service
@@ -39,13 +40,21 @@ public class GenerationService {
         return prompt != null && !prompt.isBlank() && prompt.length() <= 32000;
     }
     public GenerateResponse generate(GenerateRequest request) {
+        return generate(request, false);
+    }
+    public GenerateResponse generateRouted(GenerateRequest request) {
+        return generate(request, true);
+    }
+    private GenerateResponse generate(GenerateRequest request, boolean routed) {
         validate(request);
         String model = request.model();
         ModelProvider provider = providers.apply(model);
         long start = System.nanoTime();
         GenerateResponse execution;
         try {
-            String result = provider.generate(model, request.prompt());
+            String result = routed && provider instanceof OpenRouterProvider cloud
+                    ? cloud.generateWithZeroPriceCeiling(model, request.prompt())
+                    : provider.generate(model, request.prompt());
             execution = new GenerateResponse(model, result, elapsed(start), "SUCCESS", null);
         } catch (ProviderException e) {
             execution = new GenerateResponse(model, null, elapsed(start), "FAILED",

@@ -16,9 +16,9 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import vn.alfha.modelhub.provider.OpenRouterProvider;
 
 final class OpenRouterPricing {
-    private static final String OFFICIAL_GENERATION = "https://openrouter.ai/api/v1/chat/completions";
     private static final URI CATALOG = URI.create("https://openrouter.ai/api/v1/models");
     private static final int MAX_BYTES = 4 * 1024 * 1024;
 
@@ -56,7 +56,7 @@ final class OpenRouterPricing {
 
     Check check(String model) {
         if (!fixedFreeModel(model)) return new Check(model, Instant.now(), "CLOUD_NOT_VERIFIED");
-        if (!OFFICIAL_GENERATION.equals(generationEndpoint))
+        if (!OpenRouterProvider.OFFICIAL_ENDPOINT.equals(generationEndpoint))
             return new Check(model, Instant.now(), "CLOUD_ENDPOINT_UNTRUSTED");
         Instant started = Instant.now();
         String rejection;

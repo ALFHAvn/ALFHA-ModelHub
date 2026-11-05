@@ -15,6 +15,14 @@ import vn.alfha.modelhub.dto.BenchmarkReport;
 import vn.alfha.modelhub.dto.BenchmarkReport.Result;
 
 public final class RoutingPolicy {
+    enum Mode {
+        PREVIEW("basic-preview-v1"),
+        LOCAL_DISPATCH("basic-local-dispatch-v1"),
+        CLOUD_ALLOWED_DISPATCH("basic-cloud-allowed-dispatch-v1");
+
+        final String version;
+        Mode(String version) { this.version = version; }
+    }
     private static final Thresholds GATES = new Thresholds(3, 30, 24, 80, 5, 14);
     private static final Set<String> PROVIDER_FAILURES = Set.of(
             "RATE_LIMITED", "TIMEOUT", "CONNECTION_FAILURE", "PROVIDER_ERROR", "INVALID_PROVIDER_RESPONSE");
@@ -43,11 +51,11 @@ public final class RoutingPolicy {
 
     Decision preview(Instant now, Instant cutoff, BenchmarkDataset dataset, String hash,
             List<Candidate> configured, List<BenchmarkReport> reports, List<Exclusion> unavailable) {
-        return evaluate(now, cutoff, dataset, hash, configured, reports, unavailable, false);
+        return evaluate(now, cutoff, dataset, hash, configured, reports, unavailable, Mode.PREVIEW);
     }
 
     Decision evaluate(Instant now, Instant cutoff, BenchmarkDataset dataset, String hash,
-            List<Candidate> configured, List<BenchmarkReport> reports, List<Exclusion> unavailable, boolean localOnly) {
+            List<Candidate> configured, List<BenchmarkReport> reports, List<Exclusion> unavailable, Mode mode) {
         var candidates = configured.stream().sorted(ID_ORDER).toList();
         var paired = candidates.stream().filter(Candidate::evidenceEligible).toList();
         var tasks = new HashSet<String>();
@@ -73,7 +81,7 @@ public final class RoutingPolicy {
             return duplicate;
         });
         var explanations = candidates.stream()
-                .map(candidate -> explain(candidate, valid, tasks.size(), now, localOnly)).toList();
+                .map(candidate -> explain(candidate, valid, tasks.size(), now, mode)).toList();
         var eligible = explanations.stream().filter(candidate -> candidate.reasons().isEmpty()).toList();
         var selected = exclusions.stream().anyMatch(e -> "EVIDENCE_UNAVAILABLE".equals(e.reason()))
                 ? null : rank(eligible);
@@ -87,7 +95,7 @@ public final class RoutingPolicy {
         } else {
             model = selected.model();
         }
-        return new Decision("basic", localOnly ? "basic-local-dispatch-v1" : "basic-preview-v1",
+        return new Decision("basic", mode.version,
                 now, dataset.id(), dataset.version(), hash, cutoff,
                 outcome, model, reason, GATES,
                 valid.stream().map(BenchmarkReport::id).sorted().toList(),
@@ -143,7 +151,7 @@ public final class RoutingPolicy {
     }
 
     private Explanation explain(Candidate candidate, List<BenchmarkReport> reports, int taskCount, Instant now,
-            boolean localOnly) {
+            Mode mode) {
         var rows = reports.stream().flatMap(report -> report.results().stream())
                 .filter(row -> candidate.model().equals(row.execution().model())).toList();
         int passed = (int) rows.stream().filter(row -> "PASS".equals(row.score())).count();
@@ -157,7 +165,7 @@ public final class RoutingPolicy {
                 attempts == 0 ? null : (double) scored / attempts, median(latencies));
         var reasons = new ArrayList<String>();
         if (!candidate.evidenceEligible()) reasons.add("MODEL_NOT_ELIGIBLE");
-        else if (!candidate.local() && localOnly) reasons.add("CLOUD_DISPATCH_DISABLED");
+        else if (!candidate.local() && mode == Mode.LOCAL_DISPATCH) reasons.add("CLOUD_DISPATCH_DISABLED");
         else if (!candidate.local()) {
             String rejection = candidate.pricing() == null ? "CLOUD_NOT_VERIFIED"
                     : candidate.pricing().reason(candidate.model(), now);

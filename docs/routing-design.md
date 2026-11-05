@@ -233,8 +233,7 @@ candidate and adds a reason to the preview. The response includes
 at most 60 seconds and each eligible preview checks the catalog afresh.
 
 This check applies to recommendations. Pricing, availability, and quota can
-change after the check. A future routed-generation endpoint needs its own
-dispatch-time safeguard.
+change after the check. Cloud dispatch uses its own fresh check.
 
 ## Local routed generation
 
@@ -253,8 +252,24 @@ status as explicit generation. If the policy returns `NO_ROUTE`, the
 endpoint returns HTTP 503 with a null generation result. Each routed request
 can dispatch at most once and uses normal execution history when configured.
 
-This first dispatch policy is local-only. Fixed-free cloud candidates retain
+Dispatch defaults to local-only. Fixed-free cloud candidates retain
 their evidence metrics and show `CLOUD_DISPATCH_DISABLED`, even when the
-separate preview can verify their pricing. Routed generation makes no catalog
-requests. Cloud dispatch remains a separate step requiring a fresh catalog
-check and a provider-side price constraint.
+separate preview can verify their pricing.
+
+### Opt-in cloud dispatch
+
+Set `--modelhub.routing.generation.allow-cloud=true` to allow a configured
+OpenRouter model to compete for a routed request. Each eligible dispatch
+checks the official catalog again and requires an exact fixed `:free` model
+with verified zero pricing. The preview setting is independent. Failed
+pricing verification excludes the cloud candidate before sending any prompt.
+
+If cloud wins, ModelHub sends one text-only request for the selected model
+to the official endpoint. It disables OpenRouter provider fallbacks and sets
+the documented prompt, completion, request, and image price ceilings to zero.
+Provider errors are returned with the decision. Existing explicit generation
+and benchmark requests retain their original payloads.
+[OpenRouter provider routing documentation](https://openrouter.ai/docs/guides/routing/provider-selection#max-price)
+
+Tests use fixture catalog responses and stub providers. Live enforcement of
+zero-valued limits and account-level billing behavior remain unverified.

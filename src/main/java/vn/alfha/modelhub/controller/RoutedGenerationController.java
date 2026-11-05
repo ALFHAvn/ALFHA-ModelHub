@@ -30,9 +30,9 @@ public class RoutedGenerationController {
     public ResponseEntity<Result> generate(@RequestBody Request request) {
         if (!GenerationService.validPrompt(request.prompt()))
             throw new IllegalArgumentException("Provide a prompt of 1 to 32000 characters");
-        var decision = routing.localDispatch(request.profile());
+        var decision = routing.dispatch(request.profile());
         if (decision.selectedModel() == null) return ResponseEntity.status(503).body(new Result(decision, null));
-        var result = generation.generate(new GenerateRequest(decision.selectedModel(), request.prompt()));
+        var result = generation.generateRouted(new GenerateRequest(decision.selectedModel(), request.prompt()));
         return ResponseEntity.status(GenerationController.status(result)).body(new Result(decision, result));
     }
 }
