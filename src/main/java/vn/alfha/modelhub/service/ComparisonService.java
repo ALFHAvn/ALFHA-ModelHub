@@ -3,6 +3,7 @@ package vn.alfha.modelhub.service;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.List;
+import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
 import vn.alfha.modelhub.dto.*;
 
@@ -22,10 +23,14 @@ public class ComparisonService {
         generation.validate(first);
         generation.validate(second);
         // Each provider has its own request timeout; neither task cancels its peer on failure.
+        return new CompareResponse(runPair(() -> generation.generate(first), () -> generation.generate(second)));
+    }
+
+    static <T> List<T> runPair(Supplier<T> first, Supplier<T> second) {
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            var firstResult = CompletableFuture.supplyAsync(() -> generation.generate(first), executor);
-            var secondResult = CompletableFuture.supplyAsync(() -> generation.generate(second), executor);
-            return new CompareResponse(List.of(firstResult.join(), secondResult.join()));
+            var firstResult = CompletableFuture.supplyAsync(first, executor);
+            var secondResult = CompletableFuture.supplyAsync(second, executor);
+            return List.of(firstResult.join(), secondResult.join());
         }
     }
 }

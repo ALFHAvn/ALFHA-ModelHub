@@ -28,11 +28,22 @@ class BenchmarkIT {
                     """, java.util.UUID.randomUUID());
             var stub = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
             var calls = new java.util.concurrent.atomic.AtomicInteger();
+            var scheduledCloudCalls = new java.util.concurrent.atomic.AtomicInteger(-1);
+            var cloudStarts = new java.util.concurrent.CopyOnWriteArrayList<Long>();
             stub.createContext("/", exchange -> {
                 calls.incrementAndGet();
                 boolean cloud = exchange.getRequestURI().getPath().equals("/chat");
-                byte[] bytes = (cloud ? "private-error-body" : "{\"response\":\"42\",\"done\":true}").getBytes(StandardCharsets.UTF_8);
-                exchange.sendResponseHeaders(cloud ? 500 : 200, bytes.length);
+                int status = cloud ? 500 : 200;
+                String body = cloud ? "private-error-body" : "{\"response\":\"42\",\"done\":true}";
+                if (cloud && scheduledCloudCalls.get() >= 0) {
+                    cloudStarts.add(System.nanoTime());
+                    int attempt = scheduledCloudCalls.getAndIncrement();
+                    status = attempt == 1 ? 200 : 429;
+                    if (status == 429) exchange.getResponseHeaders().set("Retry-After", attempt == 0 ? "1" : "31");
+                    else body = "{\"choices\":[{\"message\":{\"content\":\"42\"},\"finish_reason\":\"stop\"}]}";
+                }
+                byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(status, bytes.length);
                 exchange.getResponseBody().write(bytes);
                 exchange.close();
             });
@@ -82,6 +93,40 @@ class BenchmarkIT {
                     }
                     assertEquals(400, get(client, base + "/api/benchmarks/not-a-uuid").statusCode());
                     assertEquals(404, get(client, base + "/api/benchmarks/" + java.util.UUID.randomUUID()).statusCode());
+                    scheduledCloudCalls.set(0);
+                    var scheduled = client.send(HttpRequest.newBuilder(URI.create(base + "/api/benchmarks"))
+                            .timeout(Duration.ofSeconds(20)).header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                    {"datasetId":"basics","datasetVersion":"2","models":["qwen3:4b","vendor/model:free"],
+                                     "schedule":{"minIntervalMs":250,"maxRetries":1}}
+                                    """)).build(), HttpResponse.BodyHandlers.ofString());
+                    assertEquals(201, scheduled.statusCode(), scheduled.body());
+                    var paced = mapper.readTree(scheduled.body());
+                    assertEquals(8, paced.path("skippedCloudTasks").size());
+                    assertEquals(10, paced.path("summaries").path(0).path("attempted").asInt());
+                    assertEquals(2, paced.path("summaries").path(1).path("attempted").asInt());
+                    var retry = paced.path("results").path(1);
+                    assertEquals("PASS", retry.path("score").asString());
+                    assertEquals(2, retry.path("attempts").size());
+                    var initial = retry.path("attempts").path(0);
+                    assertEquals(1000, initial.path("error").path("retryAfterMs").asLong());
+                    assertEquals(1000L, jdbc.queryForObject("SELECT retry_after_ms FROM execution_runs WHERE request_id = ?::uuid",
+                            Long.class, initial.path("requestId").asString()));
+                    assertEquals(3, scheduledCloudCalls.get());
+                    assertTrue(cloudStarts.get(1) - cloudStarts.get(0) >= Duration.ofSeconds(1).toNanos());
+                    // Starts are paced on the client, so allow a small difference in loopback transit.
+                    assertTrue(cloudStarts.get(2) - cloudStarts.get(1) >= Duration.ofMillis(225).toNanos());
+                    assertEquals(paced, mapper.readTree(get(client, base + scheduled.headers().firstValue("Location").orElseThrow()).body()));
+
+                    // Reopen the first report in its pre-scheduling JSON shape.
+                    var legacy = (tools.jackson.databind.node.ObjectNode) mapper.readTree(reportJson);
+                    legacy.remove("schedule");
+                    legacy.remove("skippedCloudTasks");
+                    for (var result : legacy.path("results")) {
+                        ((tools.jackson.databind.node.ObjectNode) result).remove("attempts");
+                    }
+                    jdbc.update("UPDATE benchmark_reports SET report = ?::jsonb WHERE id = ?::uuid",
+                            mapper.writeValueAsString(legacy), legacy.path("id").asString());
                 }
                 try (var restarted = new SpringApplicationBuilder(ModelHubApplication.class).run(args);
                      var client = HttpClient.newHttpClient()) {

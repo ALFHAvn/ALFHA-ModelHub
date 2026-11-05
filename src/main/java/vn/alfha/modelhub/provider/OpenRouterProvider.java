@@ -4,6 +4,10 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.*;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
@@ -52,7 +56,11 @@ public class OpenRouterProvider implements ModelProvider {
                             "model", model, "stream", false,
                             "messages", List.of(Map.of("role", "user", "content", prompt)))))).build();
             var response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 429) throw failure("RATE_LIMITED", "Provider rate limit reached");
+            if (response.statusCode() == 429) {
+                Long delay = response.headers().firstValue("Retry-After")
+                        .map(OpenRouterProvider::parseRetryAfter).orElse(null);
+                throw new ProviderException("RATE_LIMITED", "Provider rate limit reached", delay);
+            }
             if (response.statusCode() < 200 || response.statusCode() >= 300)
                 throw failure("PROVIDER_ERROR", "OpenRouter rejected the request");
             try {
@@ -76,5 +84,22 @@ public class OpenRouterProvider implements ModelProvider {
             throw failure("INTERRUPTED", "Provider request interrupted");
         }
     }
+    static Long parseRetryAfter(String value) {
+        String header = value.strip();
+        if (header.matches("[0-9]+")) {
+            try {
+                return Math.multiplyExact(Long.parseLong(header), 1000);
+            } catch (NumberFormatException | ArithmeticException e) {
+                return Long.MAX_VALUE;
+            }
+        }
+        try {
+            Instant date = ZonedDateTime.parse(header, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant();
+            return Math.max(0, Duration.between(Instant.now(), date).toMillis());
+        } catch (DateTimeParseException | ArithmeticException e) {
+            return null;
+        }
+    }
+
     private ProviderException failure(String code, String message) { return new ProviderException(code, message); }
 }

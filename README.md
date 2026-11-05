@@ -389,7 +389,7 @@ HTTP extension.
 
 ## Reliability and scope
 
-Provider calls have explicit connection/request timeouts, no automatic retries,
+Provider calls have explicit connection/request timeouts,
 no automatic code execution, no paid-model fallback, and sanitized errors.
 PostgreSQL connection, socket, and query timeouts bound common database outages.
 Expected HTTP errors preserve 400/404/405/415 status codes and the code/message

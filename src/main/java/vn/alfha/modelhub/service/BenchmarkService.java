@@ -50,19 +50,38 @@ public class BenchmarkService {
                 return new ModelConfig(model, provider, provider.equals("ollama") ? localTimeout : cloudTimeout,
                         "Provider defaults; non-streaming; sampling settings and model weights are not pinned");
             }).toList();
+            var cloudScheduler = request.schedule() == null ? null : new BenchmarkCloudScheduler(request.schedule());
             var results = new ArrayList<Result>();
+            var skippedCloudTasks = new ArrayList<String>();
             for (var task : dataset.tasks()) {
-                var executions = selected.size() == 1
-                        ? List.of(generation.generate(new GenerateRequest(selected.getFirst(), task.prompt())))
-                        : comparison.compare(new CompareRequest(selected, task.prompt())).results();
-                for (var execution : executions) {
+                List<List<GenerateResponse>> executions;
+                if (cloudScheduler == null && selected.size() == 2) {
+                    executions = comparison.compare(new CompareRequest(selected, task.prompt())).results()
+                            .stream().map(List::of).toList();
+                } else {
+                    var jobs = configs.stream().<java.util.function.Supplier<List<GenerateResponse>>>map(config -> () -> {
+                        var input = new GenerateRequest(config.model(), task.prompt());
+                        if (cloudScheduler != null && "openrouter".equals(config.provider()))
+                            return cloudScheduler.execute(() -> generation.generate(input));
+                        return List.of(generation.generate(input));
+                    }).toList();
+                    executions = jobs.size() == 1 ? List.of(jobs.getFirst().get())
+                            : ComparisonService.runPair(jobs.get(0), jobs.get(1));
+                }
+                for (var attempts : executions) {
+                    if (attempts.isEmpty()) {
+                        skippedCloudTasks.add(task.id());
+                        continue;
+                    }
+                    var execution = attempts.getLast();
                     String score = !execution.status().equals("SUCCESS") ? "NOT_SCORED"
                             : scorer.passes(task, execution.response()) ? "PASS" : "FAIL";
-                    results.add(new Result(task.id(), execution, score));
+                    results.add(new Result(task.id(), execution, score, attempts));
                 }
             }
             var report = new BenchmarkReport(UUID.randomUUID(), started, Instant.now(), catalog.hash(dataset.version()), "objective-v1",
-                    dataset, configs, List.copyOf(results), selected.stream().map(model -> summarize(model, results)).toList());
+                    dataset, configs, List.copyOf(results), selected.stream().map(model -> summarize(model, results)).toList(),
+                    request.schedule(), skippedCloudTasks);
             repository.save(report);
             return report;
         } finally { slot.release(); }
@@ -73,7 +92,7 @@ public class BenchmarkService {
         int passed = (int) runs.stream().filter(r -> r.score().equals("PASS")).count();
         double totalTime = runs.stream().filter(r -> r.execution().status().equals("SUCCESS")).mapToLong(r -> r.execution().durationMs()).sum();
         return new Summary(model, runs.size(), successful, runs.size() - successful, passed, successful - passed,
-                successful == 0 ? null : (double) passed / successful, (double) passed / runs.size(),
+                successful == 0 ? null : (double) passed / successful, runs.isEmpty() ? 0 : (double) passed / runs.size(),
                 successful == 0 ? null : totalTime / successful);
     }
     public BenchmarkReport find(UUID id) {

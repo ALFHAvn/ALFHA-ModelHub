@@ -56,6 +56,35 @@ runs make 30 local and 30 cloud attempts, with no automatic retries, paid fallba
 or model substitution. A listed model can still fail at runtime; failed attempts
 are retained in reports and are not scored as incorrect answers.
 
+Pass `-MinIntervalMs 3000 -MaxRetries 1` to enable benchmark pacing and retries.
+The quota preflight checks the maximum number of possible cloud attempts,
+including retries. For one ten-task repetition with one retry per task,
+the check requires 20 free requests remaining.
+
+The equivalent API request includes a schedule:
+
+```json
+{"datasetId":"basics","datasetVersion":"2","models":["qwen3:4b","vendor/model:free"],
+ "schedule":{"minIntervalMs":3000,"maxRetries":1}}
+```
+
+Pacing applies to cloud attempt starts within the benchmark batch. The allowed
+interval is 0–30,000 milliseconds. Up to two extra attempts per task may be
+requested. Only HTTP 429 is retryable. The scheduler honors the provider's
+`Retry-After` delay and uses 1, 2, then 4 seconds after successive rate limits
+when the header is missing or invalid. If the requested cooldown exceeds
+30 seconds, the current task retains its last response and subsequent cloud
+tasks appear in `skippedCloudTasks`. Local tasks continue. Other API calls and
+other application instances have their own execution paths.
+
+Each result's `attempts` contains all actual calls in order. Its `execution`
+and `score` describe the terminal attempt, so the summary still counts task
+outcomes. Skipped cloud tasks have no execution record and are excluded from
+those summary denominators. The history endpoint preserves each attempt
+separately, including the parsed `error.retryAfterMs` where available. Earlier
+reports load with one attempt per recorded execution. Omitting `schedule`
+preserves the original unpaced behavior.
+
 The ignored `.env` must contain the database password and OpenRouter API key.
 The script temporarily overrides the cloud model/enabled flag and port only in
 its own process, leaving `.env` unchanged. Expanded Compose configuration and
@@ -169,12 +198,12 @@ two models for the same task execute concurrently using the existing comparison
 service. At most one benchmark batch runs per application instance; overlapping
 requests return HTTP 429 `BENCHMARK_BUSY`. This is not a cluster-wide limit.
 
-The endpoint is synchronous. With default 120-second provider timeouts, ten tasks
-can take about 20 minutes plus persistence overhead. Set your HTTP client/proxy
-timeout accordingly. Disconnecting the client does not cancel the server batch.
-There are no retries, resume support, scheduled jobs, or automatic cloud requests.
-Cloud benchmarking makes ten calls per selected cloud model and consumes free
-request quota. Automated tests do not use your `.env` key.
+The endpoint is synchronous. With default 120-second provider timeouts, ten
+unpaced tasks can take about 20 minutes plus persistence overhead. With two
+retries and pacing enabled, a run can take up to about 75 minutes plus overhead.
+Set the client and proxy timeouts accordingly. The server can continue a batch
+after the client disconnects. Cloud benchmarking uses free request quota for
+the selected model. Automated tests use stub providers.
 
 The database/report table is checked before execution. Every attempt is recorded
 through the history service; the full benchmark report is saved once at the end.

@@ -3,7 +3,9 @@ param(
     [ValidatePattern('^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+:free$')][string]$CloudModel,
     [ValidateSet('1', '2')][string]$DatasetVersion = '2',
     [ValidateRange(1, 3)][int]$Repetitions = 3,
-    [ValidateRange(1024, 65535)][int]$Port = 18086
+    [ValidateRange(1024, 65535)][int]$Port = 18086,
+    [ValidateRange(0, 30000)][int]$MinIntervalMs = 0,
+    [ValidateRange(0, 2)][int]$MaxRetries = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,6 +17,7 @@ $savedModel = $env:OPENROUTER_MODEL
 $started = $false
 $apiKey = $null
 $stage = 'preflight'
+$useSchedule = $PSBoundParameters.ContainsKey('MinIntervalMs') -or $PSBoundParameters.ContainsKey('MaxRetries')
 Push-Location $root
 try {
     $env:APP_PORT = "$Port"
@@ -42,7 +45,9 @@ try {
     }
     $quotaBefore = Read-FreeQuota
     $quotaBefore | ConvertTo-Json | Set-Content (Join-Path $output 'quota-before.json') -Encoding utf8
-    if ($quotaBefore.remaining -lt 10 * $Repetitions) { throw 'Insufficient free quota for requested repetitions' }
+    if ($quotaBefore.remaining -lt 10 * $Repetitions * (1 + $MaxRetries)) {
+        throw 'Insufficient free quota for requested repetitions and maximum retries'
+    }
     $started = $true
     $stage = 'Compose startup'
     docker compose -p $project up --build --detach --wait --wait-timeout 180
@@ -65,19 +70,28 @@ try {
     $before = Read-LocalRuntime
     $before | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $output 'runtime-before.json') -Encoding utf8
     $reports = @()
+    $historyMatches = 0
+    $cloudAttempts = 0
     for ($iteration = 1; $iteration -le $Repetitions; $iteration++) {
         $stage = "comparison repetition $iteration"
         Write-Output "Starting paired repetition $iteration/${Repetitions}: $($local[0].model) and $CloudModel"
-        $body = @{datasetId = 'basics'; datasetVersion = $DatasetVersion; models = @($local[0].model, $CloudModel)} | ConvertTo-Json
-        $created = Invoke-RestMethod "$base/api/benchmarks" -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 1800
+        $request = @{datasetId = 'basics'; datasetVersion = $DatasetVersion; models = @($local[0].model, $CloudModel)}
+        if ($useSchedule) { $request.schedule = @{minIntervalMs = $MinIntervalMs; maxRetries = $MaxRetries} }
+        $created = Invoke-RestMethod "$base/api/benchmarks" -Method Post -ContentType 'application/json' -Body ($request | ConvertTo-Json) -TimeoutSec 4800
         $report = Invoke-RestMethod "$base/api/benchmarks/$($created.id)" -TimeoutSec 15
-        if ($report.dataset.version -ne $DatasetVersion -or $report.results.Count -ne 20) { throw 'Unexpected report snapshot' }
+        if ($report.dataset.version -ne $DatasetVersion -or $report.results.Count + @($report.skippedCloudTasks).Count -ne 20) {
+            throw 'Unexpected report snapshot'
+        }
         $report | ConvertTo-Json -Depth 40 | Set-Content (Join-Path $output "run-$iteration.json") -Encoding utf8
         $history = Invoke-RestMethod "$base/api/runs?page=0&size=100" -TimeoutSec 15
         foreach ($result in $report.results) {
-            $matching = @($history.content | Where-Object requestId -eq $result.execution.requestId)
-            if ($matching.Count -ne 1 -or $matching[0].response -cne $result.execution.response -or $matching[0].status -ne $result.execution.status) {
-                throw 'History did not match the saved report'
+            foreach ($attempt in $result.attempts) {
+                $matching = @($history.content | Where-Object requestId -eq $attempt.requestId)
+                if ($matching.Count -ne 1 -or $matching[0].response -cne $attempt.response -or $matching[0].status -ne $attempt.status) {
+                    throw 'History did not match the saved report'
+                }
+                $historyMatches++
+                if ($attempt.model -eq $CloudModel) { $cloudAttempts++ }
             }
         }
         $reports += $report
@@ -92,12 +106,12 @@ try {
     $quotaAfter | ConvertTo-Json | Set-Content (Join-Path $output 'quota-after.json') -Encoding utf8
     $verification = [ordered]@{commit = (git rev-parse HEAD); verifiedAtUtc = [DateTime]::UtcNow.ToString('o');
         datasetVersion = $DatasetVersion; repetitions = $Repetitions; fixedCloudModel = $CloudModel;
-        cloudAttempts = 10 * $Repetitions; historyMatches = 20 * $Repetitions; localModelDigestUnchanged = $true;
-        zeroCatalogPricingAtStart = $true; automaticRetries = $false; paidFallbacks = $false; reportIds = @($reports.id)}
+        cloudAttempts = $cloudAttempts; historyMatches = $historyMatches; localModelDigestUnchanged = $true;
+        zeroCatalogPricingAtStart = $true; automaticRetries = ($MaxRetries -gt 0); paidFallbacks = $false; reportIds = @($reports.id)}
     $verification | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $output 'verification.json') -Encoding utf8
     Write-Output "PASS: $Repetitions paired reports and saved history verified. Evidence: $output"
 } catch {
-    Write-Output "Comparison did not complete at stage: $stage. Preserve partial reports under target/cloud-comparison-*; no automatic retries were made."
+    Write-Output "Comparison did not complete at stage: $stage. Preserve partial reports under target/cloud-comparison-*."
     throw 'Inspect sanitized execution errors and quota before rerunning; do not share credentials.'
 } finally {
     $apiKey = $null

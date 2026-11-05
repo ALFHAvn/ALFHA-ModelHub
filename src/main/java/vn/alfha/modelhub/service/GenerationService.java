@@ -45,7 +45,8 @@ public class GenerationService {
             String result = provider.generate(model, request.prompt());
             execution = new GenerateResponse(model, result, elapsed(start), "SUCCESS", null);
         } catch (ProviderException e) {
-            execution = new GenerateResponse(model, null, elapsed(start), "FAILED", new ApiError(e.code(), e.getMessage()));
+            execution = new GenerateResponse(model, null, elapsed(start), "FAILED",
+                    new ApiError(e.code(), e.getMessage(), e.retryAfterMs()));
         } catch (RuntimeException e) {
             execution = new GenerateResponse(model, null, elapsed(start), "FAILED",
                     new ApiError("INTERNAL_ERROR", "An unexpected error occurred"));
