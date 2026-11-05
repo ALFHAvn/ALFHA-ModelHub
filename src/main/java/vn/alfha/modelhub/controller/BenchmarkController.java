@@ -14,7 +14,10 @@ public class BenchmarkController {
     private final BenchmarkCatalog catalog;
     public BenchmarkController(BenchmarkService service, BenchmarkCatalog catalog) { this.service = service; this.catalog = catalog; }
     @GetMapping("/dataset")
-    public BenchmarkDataset dataset(@RequestParam(defaultValue = "1") String version) { return catalog.dataset(version); }
+    public BenchmarkDataset dataset(@RequestParam(defaultValue = "basics") String datasetId,
+            @RequestParam(defaultValue = "1") String version) {
+        return catalog.dataset(datasetId, version);
+    }
     @PostMapping
     public ResponseEntity<BenchmarkReport> run(@RequestBody BenchmarkRequest request) {
         var report = service.run(request);

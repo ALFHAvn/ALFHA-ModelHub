@@ -1,0 +1,42 @@
+{
+  "id": "software-engineering",
+  "version": "1",
+  "tasks": [
+    {
+      "id": "java-virtual-dispatch",
+      "prompt": "In Java, class Base has int value() { return 7; }. Class Derived extends Base and overrides it with int value() { return 42; }. Given Base ref = new Derived(); what integer does ref.value() return? Reply with only the integer. /no_think",
+      "rule": "EXACT",
+      "expected": "42"
+    },
+    {
+      "id": "sql-null-aggregation",
+      "prompt": "A SQL table t has exactly three rows with x values 2, NULL, and 2. SELECT COUNT(*) AS row_count, COUNT(x) AS non_null_count, COUNT(DISTINCT x) AS distinct_count FROM t; returns one row. Return only a JSON object with those three aliases and integer values. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {"row_count":3,"non_null_count":2,"distinct_count":1}
+    },
+    {
+      "id": "debug-loop-boundary",
+      "prompt": "In Java, for (int i = 0; i <= values.length; i++) sum += values[i]; can throw ArrayIndexOutOfBoundsException. Correct the comparison operator only so the loop visits each element exactly once, including when the array is empty. Reply with only the replacement operator. /no_think",
+      "rule": "EXACT",
+      "expected": "<"
+    },
+    {
+      "id": "reasoning-list-alias",
+      "prompt": "In Java, var a = new java.util.ArrayList<>(java.util.List.of(1, 2)); var b = a; b.set(0, 9); b = new java.util.ArrayList<>(java.util.List.of(3)); What values do a and b contain at the end? Return only a JSON object with integer arrays under keys a and b. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {"a":[9,2],"b":[3]}
+    },
+    {
+      "id": "api-idempotency-contract",
+      "prompt": "Design a response mapping for this API contract: a new idempotency key creates one order and returns 201. Reusing that key with the same payload replays the original status and creates no order. Reusing it with a different payload returns 409 and creates no order. Starting with no orders, send those three requests in that order with the same key. Return only JSON with an integer array statuses and integer order_count. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {"statuses":[201,201,409],"order_count":1}
+    },
+    {
+      "id": "structured-incident-output",
+      "prompt": "Normalize this incident record: request=r-17, retries=2, resolved=no, error absent. Return only a JSON object with request_id as a string, retries as an integer, resolved as a boolean, and error as explicit JSON null. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {"request_id":"r-17","retries":2,"resolved":false,"error":null}
+    }
+  ]
+}

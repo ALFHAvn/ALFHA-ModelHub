@@ -118,6 +118,27 @@ class BenchmarkIT {
                     assertTrue(cloudStarts.get(2) - cloudStarts.get(1) >= Duration.ofMillis(225).toNanos());
                     assertEquals(paced, mapper.readTree(get(client, base + scheduled.headers().firstValue("Location").orElseThrow()).body()));
 
+                    var pilotDataset = get(client, base + "/api/benchmarks/dataset?datasetId=software-engineering&version=1");
+                    assertEquals(200, pilotDataset.statusCode());
+                    assertEquals(400, get(client, base + "/api/benchmarks/dataset?datasetId=software-engineering&version=2").statusCode());
+                    scheduledCloudCalls.set(-1);
+                    var pilot = client.send(HttpRequest.newBuilder(URI.create(base + "/api/benchmarks"))
+                            .timeout(Duration.ofSeconds(20)).header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                    {"datasetId":"software-engineering","datasetVersion":"1","models":["qwen3:4b","vendor/model:free"]}
+                                    """)).build(), HttpResponse.BodyHandlers.ofString());
+                    assertEquals(201, pilot.statusCode(), pilot.body());
+                    var pilotReport = mapper.readTree(pilot.body());
+                    assertEquals(mapper.readTree(pilotDataset.body()), pilotReport.path("dataset"));
+                    assertEquals(12, pilotReport.path("results").size());
+                    assertEquals("PASS", pilotReport.path("results").path(0).path("score").asString());
+                    assertEquals("NOT_SCORED", pilotReport.path("results").path(1).path("score").asString());
+                    assertEquals("FAIL", pilotReport.path("results").path(2).path("score").asString());
+                    assertEquals(5, pilotReport.path("summaries").path(0).path("scoringFailures").asInt());
+                    assertEquals(6, pilotReport.path("summaries").path(1).path("failed").asInt());
+                    assertEquals(pilotReport, mapper.readTree(get(client,
+                            base + pilot.headers().firstValue("Location").orElseThrow()).body()));
+
                     // Reopen the first report in its pre-scheduling JSON shape.
                     var legacy = (tools.jackson.databind.node.ObjectNode) mapper.readTree(reportJson);
                     legacy.remove("schedule");

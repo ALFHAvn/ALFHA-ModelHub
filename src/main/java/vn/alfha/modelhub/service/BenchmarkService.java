@@ -31,13 +31,13 @@ public class BenchmarkService {
         this.localTimeout = localTimeout; this.cloudTimeout = cloudTimeout;
     }
     public BenchmarkReport run(BenchmarkRequest request) {
-        if (request == null || !catalog.dataset().id().equals(request.datasetId()) || request.models() == null
+        if (request == null || request.models() == null
                 || request.models().isEmpty() || request.models().size() > 2 || request.models().stream().anyMatch(Objects::isNull)
                 || new HashSet<>(request.models()).size() != request.models().size()
                 || request.models().contains("openrouter/free"))
-            throw new IllegalArgumentException("Choose basics and one or two distinct fixed model identifiers");
+            throw new IllegalArgumentException("Choose a dataset and one or two distinct fixed model identifiers");
         var selected = List.copyOf(request.models());
-        var dataset = catalog.dataset(request.datasetVersion());
+        var dataset = catalog.dataset(request.datasetId(), request.datasetVersion());
         for (String model : selected) generation.validate(new GenerateRequest(model, "validation"));
         if (repository == null) throw new IllegalStateException("Benchmark persistence is required");
         if (!slot.tryAcquire()) throw new BusyException();
@@ -79,7 +79,8 @@ public class BenchmarkService {
                     results.add(new Result(task.id(), execution, score, attempts));
                 }
             }
-            var report = new BenchmarkReport(UUID.randomUUID(), started, Instant.now(), catalog.hash(dataset.version()), "objective-v1",
+            var report = new BenchmarkReport(UUID.randomUUID(), started, Instant.now(),
+                    catalog.hash(dataset.id(), dataset.version()), "objective-v1",
                     dataset, configs, List.copyOf(results), selected.stream().map(model -> summarize(model, results)).toList(),
                     request.schedule(), skippedCloudTasks);
             repository.save(report);

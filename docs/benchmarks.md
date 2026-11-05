@@ -1,4 +1,4 @@
-# Milestone 7: objective benchmarks
+# Objective benchmarks
 
 The bundled `basics` dataset, versions `1` and `2`, contains ten fixed prompts for simple
 arithmetic, factual answers, instruction following, and structured JSON output.
@@ -142,6 +142,32 @@ the configured model identifier directly. `openrouter/free` is refused even if
 it appears in the model registry. General generation/comparison still permit it.
 Paid cloud model IDs remain prohibited by the existing adapter/registry.
 
+## Software engineering pilot
+
+`software-engineering` version `1` is the first Milestone 8 increment. It has
+six tasks covering Java dispatch, SQL aggregation, debugging a loop boundary,
+reasoning about aliases, API idempotency, and structured incident output.
+Inspect the dataset with
+`GET /api/benchmarks/dataset?datasetId=software-engineering&version=1`.
+
+Run it with the existing benchmark endpoint and a configured local model:
+
+```json
+{"datasetId":"software-engineering","datasetVersion":"1","models":["qwen3:4b"]}
+```
+
+The pilot grades exact text and JSON fields using `objective-v1`. It evaluates
+short answers about fixed code, data, and contracts. Generated responses are
+treated as text or JSON data. The six tasks measure a narrow set of skills
+and provide limited evidence about code-writing ability or broader engineering
+performance.
+
+The next dataset increment can add a new version with 20–30 tasks and preserve
+the pilot's hash. Tasks that require executing generated solutions belong in a
+separate increment with a disposable runner, disabled network access, bounded
+resources, and trusted tests. Cloud runs require an explicitly selected cloud
+model. The examples in the baseline and cloud scripts target `basics`.
+
 ## Scoring contract (`objective-v1`)
 
 | Rule | PASS condition |
@@ -196,7 +222,9 @@ version, and inspect configuration before drawing conclusions.
 
 ## Execution limits and failures
 
-Requests require dataset ID `basics` and one or two distinct configured model IDs.
+Requests require a registered dataset ID and one or two distinct configured model IDs.
+The dataset inspection endpoint defaults to `basics` version `1`, and run
+requests that omit `datasetVersion` use version `1` of the specified dataset.
 All selections are validated before provider calls. Tasks execute sequentially;
 two models for the same task execute concurrently using the existing comparison
 service. At most one benchmark batch runs per application instance; overlapping
