@@ -41,6 +41,37 @@ class BenchmarkCatalogTest {
             assertFalse(scorer.passes(task, "```\n" + answers.get(task.id()) + "\n```"), task.id());
         }
         assertNotEquals(catalog.hash("1"), catalog.hash("software-engineering", "1"));
-        assertThrows(IllegalArgumentException.class, () -> catalog.dataset("software-engineering", "2"));
+        assertThrows(IllegalArgumentException.class, () -> catalog.dataset("software-engineering", "3"));
+    }
+
+    @Test void expandedSuitePreservesPilotTasksAndScoresNewCases() throws Exception {
+        var mapper = new ObjectMapper();
+        var catalog = new BenchmarkCatalog(mapper);
+        var scorer = new ObjectiveScorer(mapper);
+        var pilot = catalog.dataset("software-engineering", "1");
+        var suite = catalog.dataset("software-engineering", "2");
+        assertEquals(pilot.tasks(), suite.tasks().subList(0, pilot.tasks().size()));
+        assertNotEquals(catalog.hash(pilot.id(), pilot.version()), catalog.hash(suite.id(), suite.version()));
+        assertEquals(24, suite.tasks().size());
+        assertEquals(24, suite.tasks().stream().map(BenchmarkDataset.Task::id).distinct().count());
+        for (String topic : java.util.List.of("java", "sql", "debug", "reasoning", "api", "structured")) {
+            assertEquals(4, suite.tasks().stream().filter(task -> task.id().startsWith(topic + "-")).count(), topic);
+        }
+        var examples = java.util.Map.of(
+                "java-finally", java.util.List.of("1", "2"),
+                "sql-update-snapshot", java.util.List.of("{\"a\":5,\"b\":7}", "{\"a\":5,\"b\":10}"),
+                "debug-binary-search-progress", java.util.List.of("mid + 1", "mid + 2"),
+                "reasoning-short-circuit", java.util.List.of("{\"x\":1,\"ok\":true}", "{\"x\":2,\"ok\":true}"),
+                "api-cursor-tiebreaker", java.util.List.of(
+                        "{\"first_ids\":[1,2],\"cursor\":[10,2],\"next_ids\":[3,4]}",
+                        "{\"first_ids\":[1,2],\"cursor\":[10],\"next_ids\":[4,5]}"),
+                "structured-config-merge", java.util.List.of(
+                        "{\"config\":{\"timeout_ms\":0,\"retries\":2,\"enabled\":false}}",
+                        "{\"config\":{\"timeout_ms\":500,\"retries\":2,\"enabled\":true}}"));
+        examples.forEach((id, answers) -> {
+            var task = suite.tasks().stream().filter(candidate -> candidate.id().equals(id)).findFirst().orElseThrow();
+            assertTrue(scorer.passes(task, answers.getFirst()), id);
+            assertFalse(scorer.passes(task, answers.getLast()), id);
+        });
     }
 }

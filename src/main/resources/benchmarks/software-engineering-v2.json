@@ -1,0 +1,242 @@
+{
+  "id": "software-engineering",
+  "version": "2",
+  "tasks": [
+    {
+      "id": "java-virtual-dispatch",
+      "prompt": "In Java, class Base has int value() { return 7; }. Class Derived extends Base and overrides it with int value() { return 42; }. Given Base ref = new Derived(); what integer does ref.value() return? Reply with only the integer. /no_think",
+      "rule": "EXACT",
+      "expected": "42"
+    },
+    {
+      "id": "sql-null-aggregation",
+      "prompt": "A SQL table t has exactly three rows with x values 2, NULL, and 2. SELECT COUNT(*) AS row_count, COUNT(x) AS non_null_count, COUNT(DISTINCT x) AS distinct_count FROM t; returns one row. Return only a JSON object with those three aliases and integer values. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "row_count": 3,
+        "non_null_count": 2,
+        "distinct_count": 1
+      }
+    },
+    {
+      "id": "debug-loop-boundary",
+      "prompt": "In Java, for (int i = 0; i <= values.length; i++) sum += values[i]; can throw ArrayIndexOutOfBoundsException. Correct the comparison operator only so the loop visits each element exactly once, including when the array is empty. Reply with only the replacement operator. /no_think",
+      "rule": "EXACT",
+      "expected": "<"
+    },
+    {
+      "id": "reasoning-list-alias",
+      "prompt": "In Java, var a = new java.util.ArrayList<>(java.util.List.of(1, 2)); var b = a; b.set(0, 9); b = new java.util.ArrayList<>(java.util.List.of(3)); What values do a and b contain at the end? Return only a JSON object with integer arrays under keys a and b. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "a": [
+          9,
+          2
+        ],
+        "b": [
+          3
+        ]
+      }
+    },
+    {
+      "id": "api-idempotency-contract",
+      "prompt": "Design a response mapping for this API contract: a new idempotency key creates one order and returns 201. Reusing that key with the same payload replays the original status and creates no order. Reusing it with a different payload returns 409 and creates no order. Starting with no orders, send those three requests in that order with the same key. Return only JSON with an integer array statuses and integer order_count. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "statuses": [
+          201,
+          201,
+          409
+        ],
+        "order_count": 1
+      }
+    },
+    {
+      "id": "structured-incident-output",
+      "prompt": "Normalize this incident record: request=r-17, retries=2, resolved=no, error absent. Return only a JSON object with request_id as a string, retries as an integer, resolved as a boolean, and error as explicit JSON null. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "request_id": "r-17",
+        "retries": 2,
+        "resolved": false,
+        "error": null
+      }
+    },
+    {
+      "id": "java-overload",
+      "prompt": "Java declares static String pick(Object x) { return \"object\"; } and static String pick(String x) { return \"string\"; }. Given Object x = \"hello\";, what does pick(x) return? Reply only with the returned word. /no_think",
+      "rule": "EXACT",
+      "expected": "object"
+    },
+    {
+      "id": "java-finally",
+      "prompt": "Java executes static int f() { int n = 1; try { return n; } finally { n = 2; } }. What integer does f() return? Reply only with the integer. /no_think",
+      "rule": "EXACT",
+      "expected": "1"
+    },
+    {
+      "id": "java-integer-division",
+      "prompt": "Evaluate this Java code: int n = -7; int d = 3; Return only JSON with integer keys quotient and remainder for n / d and n % d respectively. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "quotient": -2,
+        "remainder": -1
+      }
+    },
+    {
+      "id": "sql-left-join",
+      "prompt": "A PostgreSQL table customers has IDs 1 and 2. Table orders has one row with customer_id=1 and state='closed', and no other rows. Query A uses customers c LEFT JOIN orders o ON c.id=o.customer_id AND o.state='open'. Query B uses customers c LEFT JOIN orders o ON c.id=o.customer_id WHERE o.state='open'. Both select COUNT(*). Return only JSON with integer keys a and b giving the two counts. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "a": 2,
+        "b": 0
+      }
+    },
+    {
+      "id": "sql-group-filter",
+      "prompt": "A PostgreSQL table payments(team, amount) has rows ('a',8), ('a',3), ('a',NULL), ('b',9), ('b',2). A query filters WHERE amount >= 3, groups by team, and applies HAVING SUM(amount) > 10. Return only JSON with keys team and total for the sole result row. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "team": "a",
+        "total": 11
+      }
+    },
+    {
+      "id": "sql-update-snapshot",
+      "prompt": "In PostgreSQL, table pairs(a,b) contains a single row (2,5). Execute UPDATE pairs SET a = b, b = a + b;. Return only a JSON object with integer keys a and b representing the updated row. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "a": 5,
+        "b": 7
+      }
+    },
+    {
+      "id": "debug-null-guard",
+      "prompt": "A Java guard reads if (name != null || !name.isEmpty()). It should accept only a non-null and nonempty name, and should not throw for null. Replace only the logical operator between the conditions. Reply with only that operator. /no_think",
+      "rule": "EXACT",
+      "expected": "&&"
+    },
+    {
+      "id": "debug-binary-search-progress",
+      "prompt": "A Java binary search uses inclusive bounds lo and hi, loops while lo <= hi, and computes mid = lo + (hi - lo) / 2. When a[mid] < target, the buggy update lo = mid can repeat the same interval forever. Replace the right-hand side so lo is the smallest index greater than mid. Reply only in the format mid + N, replacing N with an integer literal. /no_think",
+      "rule": "EXACT",
+      "expected": "mid + 1"
+    },
+    {
+      "id": "debug-sql-null-predicate",
+      "prompt": "A PostgreSQL filter WHERE deleted_at = NULL is intended to select rows whose deleted_at is null. Replace the predicate with the standard IS predicate. Reply only with the predicate, using lowercase deleted_at, uppercase SQL keywords, and single spaces. /no_think",
+      "rule": "EXACT",
+      "expected": "deleted_at IS NULL"
+    },
+    {
+      "id": "reasoning-short-circuit",
+      "prompt": "In Java, int x = 0; boolean ok = (x++ == 0) || (++x == 2);. Return only JSON with integer key x and boolean key ok for the final values. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "x": 1,
+        "ok": true
+      }
+    },
+    {
+      "id": "reasoning-lru-trace",
+      "prompt": "A cache holds two keys. Each successful read makes its key most recently used. Each insert makes its key most recently used and, if full, removes the least recently used key. Starting empty, insert A, insert B, read A, insert C, read B. A miss leaves the cache unchanged. Return only JSON with keys evicted (string), last_read_hit (boolean), and keys (array ordered most recent first). /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "evicted": "B",
+        "last_read_hit": false,
+        "keys": [
+          "C",
+          "A"
+        ]
+      }
+    },
+    {
+      "id": "reasoning-transaction-trace",
+      "prompt": "A transaction starts with an account balance of 100. It subtracts 10, sets savepoint s, subtracts 20, rolls back to s, adds 5, and commits. Assume no concurrent writers and all statements succeed. Reply only with the final integer balance. /no_think",
+      "rule": "EXACT",
+      "expected": "95"
+    },
+    {
+      "id": "api-version-precondition",
+      "prompt": "An API starts with quantity 5 and revision 7. A write with an expected revision matching the current revision sets the quantity, increments the revision by one, and returns 200. A stale write returns 412 and changes nothing. Client A writes quantity 8 with expected revision 7, then B writes quantity 9 with expected revision 7. Return only JSON with integer array statuses and integer keys quantity and revision. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "statuses": [
+          200,
+          412
+        ],
+        "quantity": 8,
+        "revision": 8
+      }
+    },
+    {
+      "id": "api-cursor-tiebreaker",
+      "prompt": "An API pages records sorted by ascending (created_at, id). The data is (10,1), (10,2), (10,3), (11,4), (12,5), with two records per page. The cursor stores both sort keys from the last record and resumes strictly after that pair. Return only JSON with integer arrays first_ids, cursor, and next_ids, where cursor is [created_at,id]. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "first_ids": [
+          1,
+          2
+        ],
+        "cursor": [
+          10,
+          2
+        ],
+        "next_ids": [
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "id": "api-validation-order",
+      "prompt": "An API checks requests in this order: missing authentication returns 401, malformed JSON returns 400, invalid fields return 422, and a valid request returns 201. A failed check stops processing. Evaluate these independent requests in order: unauthenticated with malformed JSON; authenticated with malformed JSON; authenticated with valid JSON and invalid fields; authenticated with valid fields. Return only JSON with integer array statuses. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "statuses": [
+          401,
+          400,
+          422,
+          201
+        ]
+      }
+    },
+    {
+      "id": "structured-log-counts",
+      "prompt": "Three log records have levels INFO, ERROR, ERROR, in that order. Only the first and third records have request IDs, r1 and r2 respectively. Return only JSON with integer key error_count, array key request_ids in input order with missing IDs omitted, and boolean key has_missing_id. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "error_count": 2,
+        "request_ids": [
+          "r1",
+          "r2"
+        ],
+        "has_missing_id": true
+      }
+    },
+    {
+      "id": "structured-config-merge",
+      "prompt": "Defaults are timeout_ms=500, retries=2, enabled=true. Overrides contain timeout_ms=0 and enabled=false. An override wins whenever its key is present, including zero and false. Return only JSON with a nested object config containing the effective values with their original types. /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "config": {
+          "timeout_ms": 0,
+          "retries": 2,
+          "enabled": false
+        }
+      }
+    },
+    {
+      "id": "structured-job-state",
+      "prompt": "Jobs J1, J2, and J3 are queued, running, and failed respectively. Produce only JSON with keys terminal_ids (an array of IDs for jobs that are failed or succeeded), running_count (integer), and next_job (the first queued job ID, or explicit JSON null if none). /no_think",
+      "rule": "JSON_FIELDS",
+      "fields": {
+        "terminal_ids": [
+          "J3"
+        ],
+        "running_count": 1,
+        "next_job": "J1"
+      }
+    }
+  ]
+}

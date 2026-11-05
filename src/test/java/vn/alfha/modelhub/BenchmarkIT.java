@@ -118,26 +118,26 @@ class BenchmarkIT {
                     assertTrue(cloudStarts.get(2) - cloudStarts.get(1) >= Duration.ofMillis(225).toNanos());
                     assertEquals(paced, mapper.readTree(get(client, base + scheduled.headers().firstValue("Location").orElseThrow()).body()));
 
-                    var pilotDataset = get(client, base + "/api/benchmarks/dataset?datasetId=software-engineering&version=1");
-                    assertEquals(200, pilotDataset.statusCode());
-                    assertEquals(400, get(client, base + "/api/benchmarks/dataset?datasetId=software-engineering&version=2").statusCode());
+                    var engineeringDataset = get(client, base + "/api/benchmarks/dataset?datasetId=software-engineering&version=2");
+                    assertEquals(200, engineeringDataset.statusCode());
+                    assertEquals(400, get(client, base + "/api/benchmarks/dataset?datasetId=software-engineering&version=3").statusCode());
                     scheduledCloudCalls.set(-1);
-                    var pilot = client.send(HttpRequest.newBuilder(URI.create(base + "/api/benchmarks"))
+                    var engineering = client.send(HttpRequest.newBuilder(URI.create(base + "/api/benchmarks"))
                             .timeout(Duration.ofSeconds(20)).header("Content-Type", "application/json")
                             .POST(HttpRequest.BodyPublishers.ofString("""
-                                    {"datasetId":"software-engineering","datasetVersion":"1","models":["qwen3:4b","vendor/model:free"]}
+                                    {"datasetId":"software-engineering","datasetVersion":"2","models":["qwen3:4b","vendor/model:free"]}
                                     """)).build(), HttpResponse.BodyHandlers.ofString());
-                    assertEquals(201, pilot.statusCode(), pilot.body());
-                    var pilotReport = mapper.readTree(pilot.body());
-                    assertEquals(mapper.readTree(pilotDataset.body()), pilotReport.path("dataset"));
-                    assertEquals(12, pilotReport.path("results").size());
-                    assertEquals("PASS", pilotReport.path("results").path(0).path("score").asString());
-                    assertEquals("NOT_SCORED", pilotReport.path("results").path(1).path("score").asString());
-                    assertEquals("FAIL", pilotReport.path("results").path(2).path("score").asString());
-                    assertEquals(5, pilotReport.path("summaries").path(0).path("scoringFailures").asInt());
-                    assertEquals(6, pilotReport.path("summaries").path(1).path("failed").asInt());
-                    assertEquals(pilotReport, mapper.readTree(get(client,
-                            base + pilot.headers().firstValue("Location").orElseThrow()).body()));
+                    assertEquals(201, engineering.statusCode(), engineering.body());
+                    var engineeringReport = mapper.readTree(engineering.body());
+                    assertEquals(mapper.readTree(engineeringDataset.body()), engineeringReport.path("dataset"));
+                    assertEquals(48, engineeringReport.path("results").size());
+                    assertEquals("PASS", engineeringReport.path("results").path(0).path("score").asString());
+                    assertEquals("NOT_SCORED", engineeringReport.path("results").path(1).path("score").asString());
+                    assertEquals("FAIL", engineeringReport.path("results").path(2).path("score").asString());
+                    assertEquals(23, engineeringReport.path("summaries").path(0).path("scoringFailures").asInt());
+                    assertEquals(24, engineeringReport.path("summaries").path(1).path("failed").asInt());
+                    assertEquals(engineeringReport, mapper.readTree(get(client,
+                            base + engineering.headers().firstValue("Location").orElseThrow()).body()));
 
                     // Reopen the first report in its pre-scheduling JSON shape.
                     var legacy = (tools.jackson.databind.node.ObjectNode) mapper.readTree(reportJson);

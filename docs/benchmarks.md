@@ -142,31 +142,33 @@ the configured model identifier directly. `openrouter/free` is refused even if
 it appears in the model registry. General generation/comparison still permit it.
 Paid cloud model IDs remain prohibited by the existing adapter/registry.
 
-## Software engineering pilot
+## Software engineering suite
 
-`software-engineering` version `1` is the first Milestone 8 increment. It has
-six tasks covering Java dispatch, SQL aggregation, debugging a loop boundary,
-reasoning about aliases, API idempotency, and structured incident output.
-Inspect the dataset with
-`GET /api/benchmarks/dataset?datasetId=software-engineering&version=1`.
+The `software-engineering` dataset has a six-task pilot in version `1` and a
+24-task suite in version `2`. V2 keeps all six pilot tasks and adds three tasks
+per topic for a total of four each in Java, PostgreSQL, debugging, code reasoning,
+API design, and structured output. Inspect the expanded dataset with
+`GET /api/benchmarks/dataset?datasetId=software-engineering&version=2`.
 
 Run it with the existing benchmark endpoint and a configured local model:
 
 ```json
-{"datasetId":"software-engineering","datasetVersion":"1","models":["qwen3:4b"]}
+{"datasetId":"software-engineering","datasetVersion":"2","models":["qwen3:4b"]}
 ```
 
-The pilot grades exact text and JSON fields using `objective-v1`. It evaluates
-short answers about fixed code, data, and contracts. Generated responses are
-treated as text or JSON data. The six tasks measure a narrow set of skills
-and provide limited evidence about code-writing ability or broader engineering
-performance.
+Both versions grade exact text and JSON fields using `objective-v1`. They
+evaluate short answers about fixed code, data, and contracts, including Java
+overload resolution, SQL join filters, loop repairs, and pagination cursors.
+Generated responses are treated as text or JSON data. Exact tasks specify
+formatting in the prompt and can reject equivalent answers in another format.
+The suite provides limited evidence about code-writing ability or broader
+engineering performance.
 
-The next dataset increment can add a new version with 20–30 tasks and preserve
-the pilot's hash. Tasks that require executing generated solutions belong in a
-separate increment with a disposable runner, disabled network access, bounded
-resources, and trusted tests. Cloud runs require an explicitly selected cloud
-model. The examples in the baseline and cloud scripts target `basics`.
+Tasks that require executing generated solutions belong in a separate increment
+with a disposable runner, disabled network access, bounded resources, and trusted
+tests. A full v2 run makes 24 attempts per selected model before retries, so
+budget quota and time accordingly if adding a cloud model. The examples in the
+baseline and cloud scripts target `basics`.
 
 ## Scoring contract (`objective-v1`)
 
