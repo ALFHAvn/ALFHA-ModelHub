@@ -85,6 +85,10 @@ separately, including the parsed `error.retryAfterMs` where available. Earlier
 reports load with one attempt per recorded execution. Omitting `schedule`
 preserves the original unpaced behavior.
 
+The first live run with this policy recovered five of six rate-limited tasks
+on retry. The report compares recovery, request count, and elapsed time with
+the earlier unpaced runs. [Live paced comparison](../benchmarks/comparisons/2026-11-06-qwen3-vs-lfm25-v2-paced/README.md)
+
 The ignored `.env` must contain the database password and OpenRouter API key.
 The script temporarily overrides the cloud model/enabled flag and port only in
 its own process, leaving `.env` unchanged. Expanded Compose configuration and
