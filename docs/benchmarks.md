@@ -164,11 +164,49 @@ formatting in the prompt and can reject equivalent answers in another format.
 The suite provides limited evidence about code-writing ability or broader
 engineering performance.
 
-Tasks that require executing generated solutions belong in a separate increment
-with a disposable runner, disabled network access, bounded resources, and trusted
-tests. A full v2 run makes 24 attempts per selected model before retries, so
+A full v2 run makes 24 attempts per selected model before retries, so
 budget quota and time accordingly if adding a cloud model. The examples in the
 baseline and cloud scripts target `basics`.
+
+### Isolated Java coding pilot
+
+The standalone pilot grades one Java 21 task against six trusted test cases.
+The [median-of-three task](../benchmarks/coding/median-of-three-v1.json) specifies
+the submission format and covers ordering, duplicates, negatives, and signed
+integer extremes. Save a candidate's source as a file and run the following
+from PowerShell 7.2 or later with Docker running Linux containers.
+
+```powershell
+docker pull eclipse-temurin:21-jdk-alpine
+./scripts/run-java-coding-pilot.ps1 -SourcePath ./Main.java
+```
+
+Each test case gets a fresh non-root container with networking disabled, a
+read-only root filesystem, a 16 MiB temporary filesystem, one CPU, 256 MiB
+of memory, and a 64-process limit. The runner sends at most 16 KiB of source
+over stdin and mounts no host files. Java compiles and runs inside the
+container. The host checks the exit state and bounded standard output.
+Each case has an eight-second default timeout and a 4,096-character cap
+per output stream. The timeout covers the attached Docker client and the
+submission. Docker must remain responsive for setup and cleanup.
+
+The JSON report records the task and source hashes, task version, Docker
+image ID, timeout, and per-case outcome and elapsed time. Outcomes distinguish
+`PASS`, `WRONG_ANSWER`, `EXECUTION_ERROR`, `TIMEOUT`, and `OUTPUT_LIMIT`.
+Docker infrastructure failures abort the run as errors. The report omits
+candidate stdout and stderr. The script emits the report on stdout for the
+caller to save.
+
+This pilot is separate from the benchmark API and PostgreSQL reports.
+It expects a manually supplied Java file and makes no provider calls.
+The public fixtures measure behavior on six inputs, so hard-coded answers can
+pass and coverage is limited. Container isolation depends on the Docker
+runtime and host kernel. Evaluate submissions on a trusted local Docker setup.
+
+Run the automated fixture checks with
+`./scripts/test-java-coding-pilot.ps1`. They verify correct and incorrect
+answers, execution errors, timeout cleanup, output limits, and a successful
+submission that checks for non-loopback interfaces and a Docker socket.
 
 ## Scoring contract (`objective-v1`)
 
