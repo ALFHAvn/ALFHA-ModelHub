@@ -187,8 +187,22 @@ class BenchmarkIT {
                     assertFalse(preview.body().contains("fake-secret"));
                     assertEquals(400, get(client, previewUrl + "unknown").statusCode());
                     assertEquals(400, get(client, base(restarted) + "/api/routing/preview").statusCode());
-                    jdbc.update("UPDATE benchmark_reports SET report = '[]'::jsonb WHERE id = ?::uuid", approvedId);
                     try {
+                        var altered = mapper.readTree(reportJson);
+                        var firstRow = (tools.jackson.databind.node.ObjectNode) altered.path("results").path(0);
+                        assertEquals("PASS", firstRow.path("score").asString());
+                        firstRow.put("score", "FAIL");
+                        jdbc.update("UPDATE benchmark_reports SET report = ?::jsonb WHERE id = ?::uuid",
+                                mapper.writeValueAsString(altered), approvedId);
+                        var mismatched = get(client, previewUrl + "basic");
+                        assertEquals(200, mismatched.statusCode(), mismatched.body());
+                        var rejected = mapper.readTree(mismatched.body());
+                        assertEquals(0, rejected.path("reportIds").size());
+                        assertTrue(rejected.path("exclusions").valueStream().anyMatch(exclusion ->
+                                approvedId.equals(exclusion.path("reportId").asString())
+                                        && "SCORE_MISMATCH".equals(exclusion.path("reason").asString())));
+
+                        jdbc.update("UPDATE benchmark_reports SET report = '[]'::jsonb WHERE id = ?::uuid", approvedId);
                         var unreadable = get(client, previewUrl + "basic");
                         assertEquals(200, unreadable.statusCode(), unreadable.body());
                         var fallback = mapper.readTree(unreadable.body());

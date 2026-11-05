@@ -57,6 +57,11 @@ ambiguous rows, duplicate execution IDs across reports, incomplete reports,
 and future completion times. Filter out reports completed before the
 configuration cutoff or more than 14 days before the decision clock.
 
+Routing policy v2 re-scores successful responses against the registered
+task using the benchmark's objective scorer. A disagreement with a stored
+PASS or FAIL excludes the paired report as `SCORE_MISMATCH`. The check leaves
+the stored report intact. Report provenance still relies on operator curation.
+
 ### Metrics and ranking
 
 For each model, use the same report set and profile task IDs. Compute the

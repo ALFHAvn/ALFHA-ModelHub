@@ -16,9 +16,9 @@ import vn.alfha.modelhub.dto.BenchmarkReport.Result;
 
 public final class RoutingPolicy {
     enum Mode {
-        PREVIEW("basic-preview-v1"),
-        LOCAL_DISPATCH("basic-local-dispatch-v1"),
-        CLOUD_ALLOWED_DISPATCH("basic-cloud-allowed-dispatch-v1");
+        PREVIEW("basic-preview-v2"),
+        LOCAL_DISPATCH("basic-local-dispatch-v2"),
+        CLOUD_ALLOWED_DISPATCH("basic-cloud-allowed-dispatch-v2");
 
         final String version;
         Mode(String version) { this.version = version; }
@@ -28,6 +28,9 @@ public final class RoutingPolicy {
             "RATE_LIMITED", "TIMEOUT", "CONNECTION_FAILURE", "PROVIDER_ERROR", "INVALID_PROVIDER_RESPONSE");
     private static final Comparator<Candidate> ID_ORDER = Comparator.comparing(Candidate::provider)
             .thenComparing(Candidate::model);
+    private final ObjectiveScorer scorer;
+
+    RoutingPolicy(ObjectiveScorer scorer) { this.scorer = scorer; }
 
     record Candidate(String model, String provider, String timeout, OpenRouterPricing.Check pricing) {
         Candidate(String model, String provider, String timeout) { this(model, provider, timeout, null); }
@@ -58,8 +61,8 @@ public final class RoutingPolicy {
             List<Candidate> configured, List<BenchmarkReport> reports, List<Exclusion> unavailable, Mode mode) {
         var candidates = configured.stream().sorted(ID_ORDER).toList();
         var paired = candidates.stream().filter(Candidate::evidenceEligible).toList();
-        var tasks = new HashSet<String>();
-        dataset.tasks().forEach(task -> tasks.add(task.id()));
+        var tasks = new HashMap<String, BenchmarkDataset.Task>();
+        dataset.tasks().forEach(task -> tasks.put(task.id(), task));
         var exclusions = new ArrayList<>(unavailable);
         var valid = new ArrayList<BenchmarkReport>();
         var reportCounts = new HashMap<UUID, Integer>();
@@ -105,7 +108,7 @@ public final class RoutingPolicy {
     }
 
     private String reject(BenchmarkReport report, Instant now, Instant cutoff, BenchmarkDataset dataset,
-            String hash, List<Candidate> paired, Set<String> tasks) {
+            String hash, List<Candidate> paired, Map<String, BenchmarkDataset.Task> tasks) {
         if (report.id() == null) return "INVALID_REPORT_ID";
         if (cutoff == null) return "CUTOFF_REQUIRED";
         var completed = report.completedAt();
@@ -127,11 +130,17 @@ public final class RoutingPolicy {
             return "INCOMPLETE_REPORT";
         var modelsByTask = new HashMap<String, Set<String>>();
         for (var row : report.results()) {
-            if (!validRow(row) || !tasks.contains(row.taskId())) return "INVALID_RESULT";
+            if (!validRow(row)) return "INVALID_RESULT";
+            var task = tasks.get(row.taskId());
+            if (task == null) return "INVALID_RESULT";
             var model = row.execution().model();
             if (paired.stream().noneMatch(candidate -> candidate.model().equals(model))
                     || !modelsByTask.computeIfAbsent(row.taskId(), ignored -> new HashSet<>()).add(model))
                 return "INVALID_RESULT";
+            if ("SUCCESS".equals(row.execution().status())) {
+                String expected = scorer.passes(task, row.execution().response()) ? "PASS" : "FAIL";
+                if (!expected.equals(row.score())) return "SCORE_MISMATCH";
+            }
         }
         return null;
     }

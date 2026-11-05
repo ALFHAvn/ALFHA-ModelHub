@@ -30,6 +30,7 @@ public class RoutingPreview {
     private final OpenRouterPricing pricing;
     private final boolean verifyCloud;
     private final boolean allowCloudDispatch;
+    private final RoutingPolicy policy;
 
     @Autowired
     public RoutingPreview(BenchmarkCatalog catalog, ObjectProvider<BenchmarkRepository> repository,
@@ -39,18 +40,19 @@ public class RoutingPreview {
             @Value("${modelhub.routing.preview.cutoff:}") String cutoff,
             @Value("${modelhub.routing.preview.verify-cloud:false}") boolean verifyCloud,
             @Value("${modelhub.routing.generation.allow-cloud:false}") boolean allowCloudDispatch,
-            @Value("${modelhub.openrouter.endpoint}") String cloudEndpoint, ObjectMapper mapper) {
+            @Value("${modelhub.openrouter.endpoint}") String cloudEndpoint, ObjectMapper mapper, ObjectiveScorer scorer) {
         this(catalog, repository.getIfAvailable(), registry, localTimeout, cloudTimeout, ids, cutoff,
-                verifyCloud, allowCloudDispatch, new OpenRouterPricing(mapper, cloudEndpoint));
+                verifyCloud, allowCloudDispatch, new OpenRouterPricing(mapper, cloudEndpoint), scorer);
     }
 
     RoutingPreview(BenchmarkCatalog catalog, BenchmarkRepository repository, ModelRegistry registry,
             String localTimeout, String cloudTimeout, String ids, String cutoff, boolean verifyCloud,
-            boolean allowCloudDispatch, OpenRouterPricing pricing) {
+            boolean allowCloudDispatch, OpenRouterPricing pricing, ObjectiveScorer scorer) {
         this.catalog = catalog;
         this.verifyCloud = verifyCloud;
         this.allowCloudDispatch = allowCloudDispatch;
         this.pricing = pricing;
+        this.policy = new RoutingPolicy(scorer);
         this.repository = repository;
         this.cutoff = cutoff.isBlank() ? null : Instant.parse(cutoff.strip());
         var unique = new TreeSet<UUID>();
@@ -95,7 +97,6 @@ public class RoutingPreview {
                 }
             }
         }
-        var policy = new RoutingPolicy();
         var decision = policy.evaluate(Instant.now(), cutoff, catalog.dataset("2"), catalog.hash("2"),
                 candidates, reports, excluded, mode);
         if (!checkPricing || "EVIDENCE_UNAVAILABLE".equals(decision.reason())) return decision;

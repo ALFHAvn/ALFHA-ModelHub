@@ -29,8 +29,11 @@ class RoutingPolicyTest {
     private static final Candidate LOCAL = new Candidate("qwen3:4b", "ollama", "120s");
     private static final Candidate CLOUD = new Candidate("vendor/model:free", "openrouter", "120s");
     private final BenchmarkCatalog catalog;
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectiveScorer scorer = new ObjectiveScorer(mapper);
+    private final RoutingPolicy policy = new RoutingPolicy(scorer);
 
-    RoutingPolicyTest() throws Exception { catalog = new BenchmarkCatalog(new ObjectMapper()); }
+    RoutingPolicyTest() throws Exception { catalog = new BenchmarkCatalog(mapper); }
 
     @Test void separatesWrongAnswersFromRateLimitsAndKeepsCloudUnverified() {
         var reports = List.of(report(1), report(2), report(3));
@@ -86,7 +89,7 @@ class RoutingPolicyTest {
         assertNull(decision.selectedModel());
         assertEquals("NO_EVIDENCE", decision.reason());
         assertEquals(2, decision.candidates().stream().filter(e -> e.reasons().contains("MODEL_NOT_ELIGIBLE")).count());
-        var failedLookup = new RoutingPolicy().preview(NOW, CUTOFF, catalog.dataset("2"), catalog.hash("2"),
+        var failedLookup = policy.preview(NOW, CUTOFF, catalog.dataset("2"), catalog.hash("2"),
                 List.of(LOCAL, CLOUD), List.of(report(1), report(2), report(3)),
                 List.of(new Exclusion(null, "EVIDENCE_UNAVAILABLE")));
         assertEquals("FALLBACK_LOCAL", failedLookup.outcome());
@@ -111,12 +114,12 @@ class RoutingPolicyTest {
         var decision = preview(List.of(LOCAL, checked(fresh)), reports);
         assertEquals(CLOUD.model(), decision.selectedModel());
         assertEquals(fresh.observedAt(), decision.candidates().getLast().pricingObservedAt());
-        var dispatch = new RoutingPolicy().evaluate(NOW, CUTOFF, catalog.dataset("2"), catalog.hash("2"),
+        var dispatch = policy.evaluate(NOW, CUTOFF, catalog.dataset("2"), catalog.hash("2"),
                 List.of(LOCAL, checked(fresh)), reports, List.of(), Mode.LOCAL_DISPATCH);
         assertEquals(LOCAL.model(), dispatch.selectedModel());
         assertEquals("EVIDENCE_SELECTED", dispatch.outcome());
         assertEquals(List.of("CLOUD_DISPATCH_DISABLED"), dispatch.candidates().getLast().reasons());
-        var noLocal = new RoutingPolicy().evaluate(NOW, CUTOFF, catalog.dataset("2"), catalog.hash("2"),
+        var noLocal = policy.evaluate(NOW, CUTOFF, catalog.dataset("2"), catalog.hash("2"),
                 List.of(checked(fresh)), reports, List.of(), Mode.LOCAL_DISPATCH);
         assertEquals("NO_ROUTE", noLocal.outcome());
         assertNull(noLocal.selectedModel());
@@ -130,7 +133,6 @@ class RoutingPolicyTest {
     }
 
     @Test void dispatchRequiresOptInAndRechecksPricingForEachRequest() {
-        var mapper = new ObjectMapper();
         var completed = Instant.now().minusSeconds(15);
         var reports = List.of(report(1, completed, 0), report(2, completed, 0), report(3, completed, 0));
         var repository = new BenchmarkRepository(null, mapper) {
@@ -153,10 +155,10 @@ class RoutingPolicyTest {
                 LOCAL.model(), true, CLOUD.model());
         String ids = String.join(",", reports.stream().map(report -> report.id().toString()).toList());
         var disabled = new RoutingPreview(catalog, repository, registry, LOCAL.timeout(), CLOUD.timeout(), ids,
-                completed.minusSeconds(60).toString(), false, false, pricing);
+                completed.minusSeconds(60).toString(), false, false, pricing, scorer);
         assertEquals(LOCAL.model(), disabled.dispatch("basic").selectedModel());
         var enabled = new RoutingPreview(catalog, repository, registry, LOCAL.timeout(), CLOUD.timeout(), ids,
-                completed.minusSeconds(60).toString(), false, true, pricing);
+                completed.minusSeconds(60).toString(), false, true, pricing, scorer);
         assertEquals(LOCAL.model(), enabled.preview("basic").selectedModel());
         assertEquals(0, pricingCalls.get());
         assertEquals(CLOUD.model(), enabled.dispatch("basic").selectedModel());
@@ -164,6 +166,25 @@ class RoutingPolicyTest {
         assertEquals(LOCAL.model(), repriced.selectedModel());
         assertEquals(List.of("CLOUD_NONZERO_PRICE"), repriced.candidates().getLast().reasons());
         assertEquals(2, pricingCalls.get());
+    }
+
+    @Test void excludesReportsWhoseStoredScoresDisagreeWithTheirAnswers() {
+        var report = report(1);
+        var rows = new ArrayList<>(report.results());
+        var incorrect = rows.getFirst();
+        rows.set(0, new Result(incorrect.taskId(), incorrect.execution(), "PASS", incorrect.attempts(), null));
+        var validJson = rows.get(8);
+        rows.set(8, new Result(validJson.taskId(), validJson.execution(), "FAIL", validJson.attempts(), null));
+        for (int changedIndex : List.of(0, 8)) {
+            var changedRows = new ArrayList<>(report.results());
+            changedRows.set(changedIndex, rows.get(changedIndex));
+            var mismatch = copy(report, report.id(), report.completedAt(), report.datasetSha256(),
+                    report.scoringVersion(), null, report.models(), changedRows);
+            var decision = preview(List.of(LOCAL, CLOUD), List.of(mismatch, report(2), report(3)));
+            assertEquals("FALLBACK_LOCAL", decision.outcome());
+            assertEquals(List.of(new Exclusion(report.id(), "SCORE_MISMATCH")), decision.exclusions());
+            assertEquals(2, decision.reportIds().size());
+        }
     }
 
     private Candidate checked(OpenRouterPricing.Check check) {
@@ -176,7 +197,7 @@ class RoutingPolicyTest {
     }
 
     private Decision preview(List<Candidate> candidates, List<BenchmarkReport> reports) {
-        return new RoutingPolicy().preview(NOW, CUTOFF, catalog.dataset("2"), catalog.hash("2"),
+        return policy.preview(NOW, CUTOFF, catalog.dataset("2"), catalog.hash("2"),
                 candidates, reports, List.of());
     }
 
@@ -190,10 +211,18 @@ class RoutingPolicyTest {
         var dataset = catalog.dataset("2");
         var results = new ArrayList<Result>();
         for (int i = 0; i < dataset.tasks().size(); i++) {
-            String taskId = dataset.tasks().get(i).id();
-            var local = new GenerateResponse(new UUID(id, i * 2L), LOCAL.model(), "answer", 10 + i, "SUCCESS", null);
+            var task = dataset.tasks().get(i);
+            String taskId = task.id();
+            String answer = switch (task.rule()) {
+                case EXACT -> task.expected();
+                case JSON_OBJECT -> "{}";
+                case JSON_FIELDS -> mapper.writeValueAsString(task.fields());
+                default -> throw new IllegalArgumentException("Unsupported routing fixture rule: " + task.rule());
+            };
+            var local = new GenerateResponse(new UUID(id, i * 2L), LOCAL.model(), i == 0 ? "wrong" : answer,
+                    10 + i, "SUCCESS", null);
             boolean failed = i < failures;
-            var cloud = new GenerateResponse(new UUID(id, i * 2L + 1), CLOUD.model(), failed ? null : "answer",
+            var cloud = new GenerateResponse(new UUID(id, i * 2L + 1), CLOUD.model(), failed ? null : answer,
                     failed ? 9000 : 2, failed ? "FAILED" : "SUCCESS",
                     failed ? new ApiError("RATE_LIMITED", "limited") : null);
             results.add(new Result(taskId, local, i == 0 ? "FAIL" : "PASS", List.of(local), null));
