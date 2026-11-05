@@ -16,6 +16,7 @@ public class BenchmarkService {
     private final GenerationService generation;
     private final ComparisonService comparison;
     private final ObjectiveScorer scorer;
+    private final DockerCodingEvaluator codingEvaluator;
     private final ModelRegistry registry;
     private final BenchmarkRepository repository;
     private final String localTimeout;
@@ -23,11 +24,13 @@ public class BenchmarkService {
     private final Semaphore slot = new Semaphore(1);
 
     public BenchmarkService(BenchmarkCatalog catalog, GenerationService generation, ComparisonService comparison,
-            ObjectiveScorer scorer, ModelRegistry registry, ObjectProvider<BenchmarkRepository> repository,
+            ObjectiveScorer scorer, DockerCodingEvaluator codingEvaluator, ModelRegistry registry,
+            ObjectProvider<BenchmarkRepository> repository,
             @Value("${modelhub.ollama.timeout}") String localTimeout,
             @Value("${modelhub.openrouter.timeout}") String cloudTimeout) {
         this.catalog = catalog; this.generation = generation; this.comparison = comparison;
-        this.scorer = scorer; this.registry = registry; this.repository = repository.getIfAvailable();
+        this.scorer = scorer; this.codingEvaluator = codingEvaluator;
+        this.registry = registry; this.repository = repository.getIfAvailable();
         this.localTimeout = localTimeout; this.cloudTimeout = cloudTimeout;
     }
     public BenchmarkReport run(BenchmarkRequest request) {
@@ -38,6 +41,8 @@ public class BenchmarkService {
             throw new IllegalArgumentException("Choose a dataset and one or two distinct fixed model identifiers");
         var selected = List.copyOf(request.models());
         var dataset = catalog.dataset(request.datasetId(), request.datasetVersion());
+        boolean coding = dataset.tasks().stream().anyMatch(task -> task.rule() == BenchmarkDataset.Rule.JAVA_CODING);
+        if (coding && !codingEvaluator.enabled()) throw new CodingDisabledException();
         for (String model : selected) generation.validate(new GenerateRequest(model, "validation"));
         if (repository == null) throw new IllegalStateException("Benchmark persistence is required");
         if (!slot.tryAcquire()) throw new BusyException();
@@ -74,13 +79,25 @@ public class BenchmarkService {
                         continue;
                     }
                     var execution = attempts.getLast();
-                    String score = !execution.status().equals("SUCCESS") ? "NOT_SCORED"
-                            : scorer.passes(task, execution.response()) ? "PASS" : "FAIL";
-                    results.add(new Result(task.id(), execution, score, attempts));
+                    CodingEvaluation evaluation = null;
+                    String score = "NOT_SCORED";
+                    if ("SUCCESS".equals(execution.status())) {
+                        if (task.rule() == BenchmarkDataset.Rule.JAVA_CODING) {
+                            evaluation = codingEvaluator.evaluate(task, dataset.version(), execution.response());
+                            score = switch (evaluation.outcome()) {
+                                case PASS -> "PASS";
+                                case INFRASTRUCTURE_ERROR -> "NOT_SCORED";
+                                default -> "FAIL";
+                            };
+                        } else {
+                            score = scorer.passes(task, execution.response()) ? "PASS" : "FAIL";
+                        }
+                    }
+                    results.add(new Result(task.id(), execution, score, attempts, evaluation));
                 }
             }
             var report = new BenchmarkReport(UUID.randomUUID(), started, Instant.now(),
-                    catalog.hash(dataset.id(), dataset.version()), "objective-v1",
+                    catalog.hash(dataset.id(), dataset.version()), coding ? "java-coding-v1" : "objective-v1",
                     dataset, configs, List.copyOf(results), selected.stream().map(model -> summarize(model, results)).toList(),
                     request.schedule(), skippedCloudTasks);
             repository.save(report);
@@ -89,9 +106,10 @@ public class BenchmarkService {
     }
     private Summary summarize(String model, List<Result> results) {
         var runs = results.stream().filter(r -> r.execution().model().equals(model)).toList();
-        int successful = (int) runs.stream().filter(r -> r.execution().status().equals("SUCCESS")).count();
+        int successful = (int) runs.stream().filter(r -> !"NOT_SCORED".equals(r.score())).count();
         int passed = (int) runs.stream().filter(r -> r.score().equals("PASS")).count();
-        double totalTime = runs.stream().filter(r -> r.execution().status().equals("SUCCESS")).mapToLong(r -> r.execution().durationMs()).sum();
+        double totalTime = runs.stream().filter(r -> !"NOT_SCORED".equals(r.score()))
+                .mapToLong(r -> r.execution().durationMs()).sum();
         return new Summary(model, runs.size(), successful, runs.size() - successful, passed, successful - passed,
                 successful == 0 ? null : (double) passed / successful, runs.isEmpty() ? 0 : (double) passed / runs.size(),
                 successful == 0 ? null : totalTime / successful);
@@ -102,4 +120,5 @@ public class BenchmarkService {
     }
     public static class BusyException extends RuntimeException { }
     public static class MissingException extends RuntimeException { }
+    public static class CodingDisabledException extends RuntimeException { }
 }

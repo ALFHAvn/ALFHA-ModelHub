@@ -11,7 +11,9 @@ public record BenchmarkReport(UUID id, Instant startedAt, Instant completedAt, S
         skippedCloudTasks = skippedCloudTasks == null ? List.of() : List.copyOf(skippedCloudTasks);
     }
     public record ModelConfig(String model, String provider, String timeout, String inferenceSettings) { }
-    public record Result(String taskId, GenerateResponse execution, String score, List<GenerateResponse> attempts) {
+    public record Result(String taskId, GenerateResponse execution, String score, List<GenerateResponse> attempts,
+            @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+            CodingEvaluation codingEvaluation) {
         public Result {
             attempts = attempts == null ? List.of(execution) : List.copyOf(attempts);
         }

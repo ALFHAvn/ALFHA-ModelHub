@@ -389,8 +389,10 @@ HTTP extension.
 
 ## Reliability and scope
 
-Provider calls have explicit connection/request timeouts,
-no automatic code execution, no paid-model fallback, and sanitized errors.
+Provider calls have explicit connection/request timeouts and sanitized errors.
+Cloud model selection is restricted to free IDs.
+The opt-in Java coding benchmark compiles and runs submissions in restricted
+Docker containers. [Coding benchmark setup](docs/benchmarks.md#isolated-java-coding-benchmark)
 PostgreSQL connection, socket, and query timeouts bound common database outages.
 Expected HTTP errors preserve 400/404/405/415 status codes and the code/message
 error shape. The application health endpoint is liveness only; database migration

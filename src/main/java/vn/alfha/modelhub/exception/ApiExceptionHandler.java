@@ -13,6 +13,10 @@ import vn.alfha.modelhub.service.GenerationService.UnknownModelException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    @ExceptionHandler(vn.alfha.modelhub.service.BenchmarkService.CodingDisabledException.class)
+    public ResponseEntity<ApiError> codingDisabled() {
+        return ResponseEntity.status(503).body(new ApiError("CODING_DISABLED", "Coding evaluation is disabled"));
+    }
     @ExceptionHandler(vn.alfha.modelhub.service.BenchmarkService.BusyException.class)
     public ResponseEntity<ApiError> benchmarkBusy() {
         return ResponseEntity.status(429).body(new ApiError("BENCHMARK_BUSY", "A benchmark is already running; try later"));

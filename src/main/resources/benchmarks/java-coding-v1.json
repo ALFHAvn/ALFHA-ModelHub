@@ -1,0 +1,19 @@
+{
+  "id": "java-coding",
+  "version": "1",
+  "tasks": [
+    {
+      "id": "median-of-three",
+      "rule": "JAVA_CODING",
+      "prompt": "Write Java 21 source for a public class Main with a public static void main(String[] args). The three arguments are signed 32-bit integers. Print only their median as a decimal integer followed by a newline. The median is the middle value after sorting, with duplicate values counted. Submit one source file with no package declaration.",
+      "cases": [
+        {"id":"ascending","args":["1","2","3"],"expected":"2"},
+        {"id":"descending","args":["9","5","1"],"expected":"5"},
+        {"id":"middle-first","args":["4","9","1"],"expected":"4"},
+        {"id":"duplicate","args":["-4","8","-4"],"expected":"-4"},
+        {"id":"equal","args":["7","7","7"],"expected":"7"},
+        {"id":"extremes","args":["2147483647","-2147483648","2147483646"],"expected":"2147483646"}
+      ]
+    }
+  ]
+}

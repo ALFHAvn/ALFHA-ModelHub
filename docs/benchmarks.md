@@ -168,16 +168,40 @@ A full v2 run makes 24 attempts per selected model before retries, so
 budget quota and time accordingly if adding a cloud model. The examples in the
 baseline and cloud scripts target `basics`.
 
-### Isolated Java coding pilot
+### Isolated Java coding benchmark
 
-The standalone pilot grades one Java 21 task against six trusted test cases.
-The [median-of-three task](../benchmarks/coding/median-of-three-v1.json) specifies
-the submission format and covers ordering, duplicates, negatives, and signed
-integer extremes. Save a candidate's source as a file and run the following
-from PowerShell 7.2 or later with Docker running Linux containers.
+Dataset `java-coding` version `1` contains the median-of-three task and six
+trusted cases covering ordering, duplicates, negatives, and signed integer
+extremes. Inspect it with
+`GET /api/benchmarks/dataset?datasetId=java-coding&version=1`.
+
+Coding evaluation is disabled by default. For trusted local use, run the host
+application from the repository with PowerShell 7.2+, Docker Linux containers,
+and the normal database and provider settings. Use the runner script from the
+same checkout as the application build. Preload the Java image and enable the
+runner when starting the application.
 
 ```powershell
 docker pull eclipse-temurin:21-jdk-alpine
+java -jar target/modelhub-0.0.1-SNAPSHOT.jar --server.address=127.0.0.1 --modelhub.coding.runner=scripts/run-java-coding-pilot.ps1
+```
+
+Submit this JSON to `POST /api/benchmarks` for a local model run.
+
+```json
+{"datasetId":"java-coding","datasetVersion":"1","models":["qwen3:4b"]}
+```
+
+The normal generation path supplies the Java source and records the model
+execution. A disabled evaluator returns `503 CODING_DISABLED` before generation.
+The API takes model IDs and dataset selection. The runner path and container
+configuration come from the trusted operator and repository. The standard
+Compose deployment has coding evaluation disabled.
+
+For manual grading, save a candidate's UTF-8 source as a file and invoke the
+same runner directly.
+
+```powershell
 ./scripts/run-java-coding-pilot.ps1 -SourcePath ./Main.java
 ```
 
@@ -185,28 +209,50 @@ Each test case gets a fresh non-root container with networking disabled, a
 read-only root filesystem, a 16 MiB temporary filesystem, one CPU, 256 MiB
 of memory, and a 64-process limit. The runner sends at most 16 KiB of source
 over stdin and mounts no host files. Java compiles and runs inside the
-container. The host checks the exit state and bounded standard output.
+container, with annotation processing disabled. Capabilities are dropped and
+privilege escalation is disabled. The host checks the exit state and bounded
+standard output.
 Each case has an eight-second default timeout and a 4,096-character cap
 per output stream. The timeout covers the attached Docker client and the
-submission. Docker must remain responsive for setup and cleanup.
+submission. The API bounds the runner process to 90 seconds and attempts to
+remove that run's containers on failure. Docker must remain responsive for
+setup and cleanup.
 
-The JSON report records the task and source hashes, task version, Docker
-image ID, timeout, and per-case outcome and elapsed time. Outcomes distinguish
-`PASS`, `WRONG_ANSWER`, `EXECUTION_ERROR`, `TIMEOUT`, and `OUTPUT_LIMIT`.
-Docker infrastructure failures abort the run as errors. The report omits
-candidate stdout and stderr. The script emits the report on stdout for the
-caller to save.
+The API stores the dataset snapshot, version, model, generation execution ID,
+and optional `codingEvaluation` in the existing JSONB benchmark report.
+`GET /api/benchmarks/{id}` returns the same report. The coding verdict includes
+source hash, image ID, timeout, total evaluation time, and per-case outcomes
+and durations when the runner returns a verified report. Model latency remains
+in the generation result.
 
-This pilot is separate from the benchmark API and PostgreSQL reports.
-It expects a manually supplied Java file and makes no provider calls.
+| Outcome | Benchmark score |
+| --- | --- |
+| Every case passes | `PASS` |
+| Wrong answer, compilation error, execution error, timeout, output limit, or invalid submission | `FAIL` |
+| Provider failure or evaluator infrastructure error | `NOT_SCORED` |
+
+The aggregate coding verdict uses the first non-passing case and retains all
+individual case outcomes. An infrastructure error has an explicit coding
+verdict and no verified cases. A provider failure has its normal execution
+error and no coding verdict. For coding reports, summary `successful` counts
+scored outcomes and `failed` counts unscored outcomes. Candidate stdout and
+stderr are omitted from reports. The standalone script prints its JSON report
+and exits with an error for infrastructure failures.
+
 The public fixtures measure behavior on six inputs, so hard-coded answers can
-pass and coverage is limited. Container isolation depends on the Docker
-runtime and host kernel. Evaluate submissions on a trusted local Docker setup.
+pass. The coding benchmark is synchronous and limited to a single Java source
+file of at most 16 KiB. Container isolation relies on the Docker runtime and
+kernel. The benchmark is intended for trusted local deployments with an
+operator-controlled Docker daemon and runner script.
+[Docker Engine security](https://docs.docker.com/engine/security/)
 
 Run the automated fixture checks with
-`./scripts/test-java-coding-pilot.ps1`. They verify correct and incorrect
-answers, execution errors, timeout cleanup, output limits, and a successful
-submission that checks for non-loopback interfaces and a Docker socket.
+`./scripts/test-java-coding-pilot.ps1`. They check grading and failure cases
+along with network, filesystem, process privileges, and cgroup v2 resource
+limits. The API integration test covers the disabled and unavailable runner
+paths by default. To exercise real Docker grading and PostgreSQL persistence
+with stub model responses, preload the image and run
+`mvn verify -Dmodelhub.test.coding-docker=true`.
 
 ## Scoring contract (`objective-v1`)
 

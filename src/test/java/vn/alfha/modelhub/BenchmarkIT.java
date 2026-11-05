@@ -30,11 +30,14 @@ class BenchmarkIT {
             var calls = new java.util.concurrent.atomic.AtomicInteger();
             var scheduledCloudCalls = new java.util.concurrent.atomic.AtomicInteger(-1);
             var cloudStarts = new java.util.concurrent.CopyOnWriteArrayList<Long>();
+            var localAnswer = new java.util.concurrent.atomic.AtomicReference<>("42");
+            var mapper = new ObjectMapper();
             stub.createContext("/", exchange -> {
                 calls.incrementAndGet();
                 boolean cloud = exchange.getRequestURI().getPath().equals("/chat");
                 int status = cloud ? 500 : 200;
-                String body = cloud ? "private-error-body" : "{\"response\":\"42\",\"done\":true}";
+                String body = cloud ? "private-error-body" : mapper.writeValueAsString(
+                        java.util.Map.of("response", localAnswer.get(), "done", true));
                 if (cloud && scheduledCloudCalls.get() >= 0) {
                     cloudStarts.add(System.nanoTime());
                     int attempt = scheduledCloudCalls.getAndIncrement();
@@ -57,11 +60,12 @@ class BenchmarkIT {
                     "--modelhub.openrouter.endpoint=" + origin + "/chat"};
             String reportJson;
             String reportPath;
-            var mapper = new ObjectMapper();
             try {
                 try (var context = new SpringApplicationBuilder(ModelHubApplication.class).run(args);
                      var client = HttpClient.newHttpClient()) {
                     String base = base(context);
+                    assertEquals(503, coding(client, base).statusCode());
+                    assertEquals(0, calls.get());
                     var dataset = get(client, base + "/api/benchmarks/dataset");
                     assertEquals(200, dataset.statusCode());
                     assertEquals(10, mapper.readTree(dataset.body()).path("tasks").size());
@@ -149,12 +153,56 @@ class BenchmarkIT {
                     jdbc.update("UPDATE benchmark_reports SET report = ?::jsonb WHERE id = ?::uuid",
                             mapper.writeValueAsString(legacy), legacy.path("id").asString());
                 }
-                try (var restarted = new SpringApplicationBuilder(ModelHubApplication.class).run(args);
+                boolean realCodingRunner = Boolean.getBoolean("modelhub.test.coding-docker");
+                String[] restartArgs = java.util.Arrays.copyOf(args, args.length + 1);
+                restartArgs[args.length] = "--modelhub.coding.runner=" + (realCodingRunner
+                        ? "scripts/run-java-coding-pilot.ps1" : "target/nonexistent-coding-runner.ps1");
+                try (var restarted = new SpringApplicationBuilder(ModelHubApplication.class).run(restartArgs);
                      var client = HttpClient.newHttpClient()) {
                     var retrieved = get(client, base(restarted) + reportPath);
                     assertEquals(200, retrieved.statusCode());
                     assertEquals(mapper.readTree(reportJson), mapper.readTree(retrieved.body()));
                     assertEquals(1L, jdbc.queryForObject("SELECT count(*) FROM execution_runs WHERE model='legacy-model'", Long.class));
+                    localAnswer.set("""
+                            public class Main {
+                                public static void main(String[] args) {
+                                    int[] values = java.util.Arrays.stream(args).mapToInt(Integer::parseInt).sorted().toArray();
+                                    System.out.println(values[1]);
+                                }
+                            }
+                            """);
+                    var codingResponse = coding(client, base(restarted));
+                    assertEquals(201, codingResponse.statusCode(), codingResponse.body());
+                    var codingReport = mapper.readTree(codingResponse.body());
+                    assertEquals("java-coding", codingReport.path("dataset").path("id").asString());
+                    assertEquals("1", codingReport.path("dataset").path("version").asString());
+                    assertEquals("java-coding-v1", codingReport.path("scoringVersion").asString());
+                    var local = codingReport.path("results").path(0);
+                    assertEquals("median-of-three", local.path("taskId").asString());
+                    assertEquals("qwen3:4b", local.path("execution").path("model").asString());
+                    assertEquals("SUCCESS", local.path("execution").path("status").asString());
+                    assertEquals(realCodingRunner ? "PASS" : "NOT_SCORED", local.path("score").asString());
+                    assertEquals(realCodingRunner ? "PASS" : "INFRASTRUCTURE_ERROR",
+                            local.path("codingEvaluation").path("outcome").asString());
+                    assertEquals(realCodingRunner ? 6 : 0, local.path("codingEvaluation").path("cases").size());
+                    var cloud = codingReport.path("results").path(1);
+                    assertEquals("NOT_SCORED", cloud.path("score").asString());
+                    assertFalse(cloud.has("codingEvaluation"));
+                    assertEquals(1L, jdbc.queryForObject("SELECT count(*) FROM execution_runs WHERE request_id = ?::uuid",
+                            Long.class, local.path("execution").path("requestId").asString()));
+                    assertEquals(codingReport, mapper.readTree(get(client,
+                            base(restarted) + codingResponse.headers().firstValue("Location").orElseThrow()).body()));
+                    if (realCodingRunner) {
+                        localAnswer.set("public class Main { invalid source }");
+                        var invalid = coding(client, base(restarted));
+                        assertEquals(201, invalid.statusCode(), invalid.body());
+                        var invalidReport = mapper.readTree(invalid.body());
+                        var result = invalidReport.path("results").path(0);
+                        assertEquals("FAIL", result.path("score").asString());
+                        assertEquals("COMPILATION_ERROR", result.path("codingEvaluation").path("outcome").asString());
+                        assertEquals(invalidReport, mapper.readTree(get(client,
+                                base(restarted) + invalid.headers().firstValue("Location").orElseThrow()).body()));
+                    }
                 }
             } finally { stub.stop(0); }
         }
@@ -164,5 +212,12 @@ class BenchmarkIT {
     }
     private HttpResponse<String> get(HttpClient client, String url) throws Exception {
         return client.send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(10)).GET().build(), HttpResponse.BodyHandlers.ofString());
+    }
+    private HttpResponse<String> coding(HttpClient client, String base) throws Exception {
+        return client.send(HttpRequest.newBuilder(URI.create(base + "/api/benchmarks"))
+                .timeout(Duration.ofSeconds(110)).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("""
+                        {"datasetId":"java-coding","datasetVersion":"1","models":["qwen3:4b","vendor/model:free"]}
+                        """)).build(), HttpResponse.BodyHandlers.ofString());
     }
 }

@@ -20,7 +20,8 @@ public class BenchmarkCatalog {
     private final Map<Key, Entry> entries = new LinkedHashMap<>();
     public BenchmarkCatalog(ObjectMapper mapper) throws IOException, NoSuchAlgorithmException {
         for (var key : List.of(new Key("basics", "1"), new Key("basics", "2"),
-                new Key("software-engineering", "1"), new Key("software-engineering", "2"))) {
+                new Key("software-engineering", "1"), new Key("software-engineering", "2"),
+                new Key("java-coding", "1"))) {
             String path = "benchmarks/" + key.id() + "-v" + key.version() + ".json";
             try (var input = new ClassPathResource(path).getInputStream()) {
                 byte[] bytes = input.readAllBytes();

@@ -1,18 +1,21 @@
 #Requires -Version 7.2
 param(
     [Parameter(Mandatory)][string]$SourcePath,
-    [ValidateRange(1, 30)][int]$TimeoutSeconds = 8
+    [ValidateRange(1, 30)][int]$TimeoutSeconds = 8,
+    [ValidatePattern('^[a-f0-9]{32}$')][string]$RunId = [guid]::NewGuid().ToString('N')
 )
 
 $ErrorActionPreference = 'Stop'
 $imageTag = 'eclipse-temurin:21-jdk-alpine'
-$taskPath = Join-Path $PSScriptRoot '../benchmarks/coding/median-of-three-v1.json'
-$task = Get-Content -LiteralPath $taskPath -Raw | ConvertFrom-Json
+$taskPath = Join-Path $PSScriptRoot '../src/main/resources/benchmarks/java-coding-v1.json'
+$taskJson = (Get-Content -LiteralPath $taskPath -Raw).Replace("`r`n", "`n")
+$dataset = $taskJson | ConvertFrom-Json
+$task = $dataset.tasks[0]
 $sourceFile = Get-Item -LiteralPath $SourcePath
 if ($sourceFile -isnot [System.IO.FileInfo] -or $sourceFile.Length -gt 16384) {
     throw 'Supply a Java source file of at most 16 KiB.'
 }
-$source = [System.IO.File]::ReadAllText($sourceFile.FullName)
+$source = [Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($sourceFile.FullName))
 if ([Text.Encoding]::UTF8.GetByteCount($source) -gt 16384) {
     throw 'The UTF-8 source exceeds 16 KiB.'
 }
@@ -21,10 +24,10 @@ $image = & $docker image inspect --format '{{.Id}}' $imageTag
 if ($LASTEXITCODE -ne 0) { throw "Pull $imageTag before running the pilot." }
 
 function Invoke-IsolatedCase($case) {
-    $container = & $docker create --pull never --interactive --network none --read-only --user '65534:65534' `
+    $container = & $docker create --name "modelhub-coding-$RunId-$($case.id)" --pull never --interactive --network none --read-only --user '65534:65534' `
         --cap-drop ALL --security-opt no-new-privileges --cpus 1 --memory 256m --memory-swap 256m `
         --pids-limit 64 --log-driver none --tmpfs '/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777' `
-        --entrypoint /bin/sh $image -c 'cat > /tmp/Main.java && exec java -Xmx96m -XX:ActiveProcessorCount=1 -XX:-UsePerfData /tmp/Main.java "$@"' pilot @($case.args)
+        --entrypoint /bin/sh $image -c 'cat > /tmp/Main.java || exit 67; javac -J-Xmx96m -J-XX:ActiveProcessorCount=1 -J-XX:-UsePerfData -proc:none -d /tmp /tmp/Main.java || exit 65; java -Xmx96m -XX:ActiveProcessorCount=1 -XX:-UsePerfData -cp /tmp Main "$@" || exit 66' pilot @($case.args)
     if ($LASTEXITCODE -ne 0) { throw 'Could not create the evaluation container.' }
 
     $process = [System.Diagnostics.Process]::new()
@@ -69,7 +72,9 @@ function Invoke-IsolatedCase($case) {
                     throw 'Docker did not complete the evaluation process.'
                 }
                 $actual = [string]::new($stdout, 0, $readOut.GetAwaiter().GetResult())
-                $outcome = if ($state.ExitCode -ne 0) { 'EXECUTION_ERROR' }
+                if ($state.ExitCode -eq 67) { throw 'Could not stage the submission inside the container.' }
+                $outcome = if ($state.ExitCode -eq 65) { 'COMPILATION_ERROR' }
+                    elseif ($state.ExitCode -ne 0) { 'EXECUTION_ERROR' }
                     elseif ($actual -ceq ($case.expected + "`n") -or $actual -ceq ($case.expected + "`r`n")) { 'PASS' }
                     else { 'WRONG_ANSWER' }
                 break
@@ -91,8 +96,8 @@ function Invoke-IsolatedCase($case) {
 $results = @($task.cases | ForEach-Object { Invoke-IsolatedCase $_ })
 [ordered]@{
     taskId = $task.id
-    taskVersion = $task.version
-    taskSha256 = (Get-FileHash -LiteralPath $taskPath -Algorithm SHA256).Hash
+    taskVersion = $dataset.version
+    taskSha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($taskJson)))
     sourceSha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($source)))
     imageId = $image
     timeoutSeconds = $TimeoutSeconds

@@ -29,7 +29,8 @@ class BenchmarkServiceTest {
             @Override public Optional<BenchmarkReport> find(UUID id) { return Optional.ofNullable(saved.get(id)); }
         });
         return new BenchmarkService(new BenchmarkCatalog(mapper), generation, new ComparisonService(generation),
-                new ObjectiveScorer(mapper), registry, beans.getBeanProvider(BenchmarkRepository.class), "120s", "120s");
+                new ObjectiveScorer(mapper), new DockerCodingEvaluator(mapper, ""), registry,
+                beans.getBeanProvider(BenchmarkRepository.class), "120s", "120s");
     }
     @Test void separatesScoringFromProviderFailuresAndRetainsEveryAttempt() throws Exception {
         var catalog = new BenchmarkCatalog(mapper);
@@ -38,6 +39,7 @@ class BenchmarkServiceTest {
             case EXACT -> task.expected();
             case JSON_OBJECT -> "{}";
             case JSON_FIELDS -> mapper.writeValueAsString(task.fields());
+            case JAVA_CODING -> throw new AssertionError("Expected a basics task");
         });
         var cloudCalls = new AtomicInteger();
         var service = service((model, prompt) -> answers.get(prompt), (model, prompt) -> {
