@@ -214,3 +214,24 @@ Verification ran with `mvn -Dmaven.repo.local=.m2/repository -B -ntp verify`.
 All 39 tests passed, including two disposable PostgreSQL integration tests.
 The preview integration test verifies approved report lookup, local fallback,
 missing and unreadable report handling, and zero provider calls.
+
+## Opt-in cloud pricing verification
+
+Add `--modelhub.routing.preview.verify-cloud=true` to enable pricing
+verification. When a fixed OpenRouter `:free` model passes the benchmark
+evidence gates, the preview checks its exact ID in the
+[public OpenRouter model catalog](https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties).
+The configured generation endpoint must be the official OpenRouter endpoint.
+The catalog request sends no credentials or prompt, follows no redirects,
+and limits the request to five seconds and four MiB of catalog data.
+
+The matching entry must have explicit zero prompt and completion prices.
+Any other listed price must also be a valid zero price string. Missing,
+ambiguous, malformed, nonzero, or unavailable pricing excludes the cloud
+candidate and adds a reason to the preview. The response includes
+`pricingObservedAt` when a check was made. The policy accepts a check for
+at most 60 seconds and each eligible preview checks the catalog afresh.
+
+This check applies to recommendations. Pricing, availability, and quota can
+change after the check. A future routed-generation endpoint needs its own
+dispatch-time safeguard.

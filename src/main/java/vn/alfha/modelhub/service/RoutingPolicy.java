@@ -21,10 +21,11 @@ public final class RoutingPolicy {
     private static final Comparator<Candidate> ID_ORDER = Comparator.comparing(Candidate::provider)
             .thenComparing(Candidate::model);
 
-    record Candidate(String model, String provider, String timeout) {
+    record Candidate(String model, String provider, String timeout, OpenRouterPricing.Check pricing) {
+        Candidate(String model, String provider, String timeout) { this(model, provider, timeout, null); }
         boolean local() { return "ollama".equals(provider); }
         boolean evidenceEligible() {
-            return local() || ("openrouter".equals(provider) && model.matches("[A-Za-z0-9._-]+/[A-Za-z0-9._-]+:free"));
+            return local() || ("openrouter".equals(provider) && OpenRouterPricing.fixedFreeModel(model));
         }
     }
     record Thresholds(int minReports, int minAttempts, int minScored, int minReliabilityPercent,
@@ -32,7 +33,9 @@ public final class RoutingPolicy {
     record Exclusion(UUID reportId, String reason) { }
     record Metrics(int reports, int distinctTasks, int attempted, int scored, int passed, int incorrect,
             int providerFailures, Double correctness, Double reliability, Double medianLatencyMs) { }
-    record Explanation(String model, String provider, Metrics metrics, List<String> reasons) { }
+    record Explanation(String model, String provider, Metrics metrics, List<String> reasons,
+            @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+            Instant pricingObservedAt) { }
     public record Decision(String profile, String policyVersion, Instant asOf, String datasetId,
             String datasetVersion, String datasetSha256, Instant evidenceCutoff,
             String outcome, String selectedModel, String reason, Thresholds thresholds, List<UUID> reportIds,
@@ -64,7 +67,7 @@ public final class RoutingPolicy {
             if (duplicate) exclusions.add(new Exclusion(report.id(), "DUPLICATE_EXECUTION"));
             return duplicate;
         });
-        var explanations = candidates.stream().map(candidate -> explain(candidate, valid, tasks.size())).toList();
+        var explanations = candidates.stream().map(candidate -> explain(candidate, valid, tasks.size(), now)).toList();
         var eligible = explanations.stream().filter(candidate -> candidate.reasons().isEmpty()).toList();
         var selected = exclusions.stream().anyMatch(e -> "EVIDENCE_UNAVAILABLE".equals(e.reason()))
                 ? null : rank(eligible);
@@ -132,7 +135,7 @@ public final class RoutingPolicy {
                 && PROVIDER_FAILURES.contains(execution.error().code());
     }
 
-    private Explanation explain(Candidate candidate, List<BenchmarkReport> reports, int taskCount) {
+    private Explanation explain(Candidate candidate, List<BenchmarkReport> reports, int taskCount, Instant now) {
         var rows = reports.stream().flatMap(report -> report.results().stream())
                 .filter(row -> candidate.model().equals(row.execution().model())).toList();
         int passed = (int) rows.stream().filter(row -> "PASS".equals(row.score())).count();
@@ -146,12 +149,17 @@ public final class RoutingPolicy {
                 attempts == 0 ? null : (double) scored / attempts, median(latencies));
         var reasons = new ArrayList<String>();
         if (!candidate.evidenceEligible()) reasons.add("MODEL_NOT_ELIGIBLE");
-        else if (!candidate.local()) reasons.add("CLOUD_NOT_VERIFIED");
+        else if (!candidate.local()) {
+            String rejection = candidate.pricing() == null ? "CLOUD_NOT_VERIFIED"
+                    : candidate.pricing().reason(candidate.model(), now);
+            if (rejection != null) reasons.add(rejection);
+        }
         if (metrics.reports() < GATES.minReports() || attempts < GATES.minAttempts()) reasons.add("INSUFFICIENT_REPORTS");
         if (scored < GATES.minScored()) reasons.add("INSUFFICIENT_SCORED");
         if (attempts > 0 && 100L * scored < (long) GATES.minReliabilityPercent() * attempts)
             reasons.add("LOW_PROVIDER_RELIABILITY");
-        return new Explanation(candidate.model(), candidate.provider(), metrics, List.copyOf(reasons));
+        return new Explanation(candidate.model(), candidate.provider(), metrics, List.copyOf(reasons),
+                candidate.pricing() == null ? null : candidate.pricing().observedAt());
     }
 
     private Double median(List<Long> sorted) {

@@ -97,9 +97,28 @@ class RoutingPolicyTest {
                 entry("ollama", "z", 20, 20, 20, 10), best)));
     }
 
+    @Test void requiresFreshVerificationForTheExactCloudModel() {
+        var reports = List.of(report(1, NOW, 0), report(2, NOW, 0), report(3, NOW, 0));
+        var fresh = new OpenRouterPricing.Check(CLOUD.model(), NOW.minusSeconds(60), null);
+        var decision = preview(List.of(LOCAL, checked(fresh)), reports);
+        assertEquals(CLOUD.model(), decision.selectedModel());
+        assertEquals(fresh.observedAt(), decision.candidates().getLast().pricingObservedAt());
+        for (var check : List.of(
+                new OpenRouterPricing.Check(CLOUD.model(), NOW.minusSeconds(61), null),
+                new OpenRouterPricing.Check(CLOUD.model(), NOW.plusSeconds(1), null),
+                new OpenRouterPricing.Check("vendor/other:free", NOW, null),
+                new OpenRouterPricing.Check(CLOUD.model(), NOW, "CLOUD_NONZERO_PRICE"))) {
+            assertEquals(LOCAL.model(), preview(List.of(LOCAL, checked(check)), reports).selectedModel());
+        }
+    }
+
+    private Candidate checked(OpenRouterPricing.Check check) {
+        return new Candidate(CLOUD.model(), CLOUD.provider(), CLOUD.timeout(), check);
+    }
+
     private Explanation entry(String provider, String model, int passed, int scored, int attempted, double latency) {
         return new Explanation(model, provider, new Metrics(3, 10, attempted, scored, passed, scored - passed,
-                attempted - scored, (double) passed / scored, (double) scored / attempted, latency), List.of());
+                attempted - scored, (double) passed / scored, (double) scored / attempted, latency), List.of(), null);
     }
 
     private Decision preview(List<Candidate> candidates, List<BenchmarkReport> reports) {
@@ -110,15 +129,21 @@ class RoutingPolicyTest {
     private BenchmarkReport report(int id) { return report(id, NOW.minusSeconds(60)); }
 
     private BenchmarkReport report(int id, Instant completed) {
+        return report(id, completed, 3);
+    }
+
+    private BenchmarkReport report(int id, Instant completed, int failures) {
         var dataset = catalog.dataset("2");
         var results = new ArrayList<Result>();
         for (int i = 0; i < dataset.tasks().size(); i++) {
             String taskId = dataset.tasks().get(i).id();
             var local = new GenerateResponse(new UUID(id, i * 2L), LOCAL.model(), "answer", 10 + i, "SUCCESS", null);
-            var cloud = new GenerateResponse(new UUID(id, i * 2L + 1), CLOUD.model(), i < 3 ? null : "answer",
-                    i < 3 ? 9000 : 2, i < 3 ? "FAILED" : "SUCCESS", i < 3 ? new ApiError("RATE_LIMITED", "limited") : null);
+            boolean failed = i < failures;
+            var cloud = new GenerateResponse(new UUID(id, i * 2L + 1), CLOUD.model(), failed ? null : "answer",
+                    failed ? 9000 : 2, failed ? "FAILED" : "SUCCESS",
+                    failed ? new ApiError("RATE_LIMITED", "limited") : null);
             results.add(new Result(taskId, local, i == 0 ? "FAIL" : "PASS", List.of(local), null));
-            results.add(new Result(taskId, cloud, i < 3 ? "NOT_SCORED" : "PASS", List.of(cloud), null));
+            results.add(new Result(taskId, cloud, failed ? "NOT_SCORED" : "PASS", List.of(cloud), null));
         }
         return new BenchmarkReport(new UUID(0, id), completed.minusSeconds(10), completed, catalog.hash("2"),
                 "objective-v1", dataset, List.of(config(LOCAL), config(CLOUD)), results, List.of(), null, List.of());

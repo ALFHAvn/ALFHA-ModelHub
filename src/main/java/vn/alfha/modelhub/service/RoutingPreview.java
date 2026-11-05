@@ -11,6 +11,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import vn.alfha.modelhub.dto.BenchmarkReport;
 import vn.alfha.modelhub.repository.BenchmarkRepository;
 import vn.alfha.modelhub.service.RoutingPolicy.Candidate;
@@ -24,13 +25,17 @@ public class RoutingPreview {
     private final List<Candidate> candidates;
     private final List<UUID> reportIds;
     private final Instant cutoff;
+    private final OpenRouterPricing pricing;
 
     public RoutingPreview(BenchmarkCatalog catalog, ObjectProvider<BenchmarkRepository> repository,
             ModelRegistry registry, @Value("${modelhub.ollama.timeout}") String localTimeout,
             @Value("${modelhub.openrouter.timeout}") String cloudTimeout,
             @Value("${modelhub.routing.preview.report-ids:}") String ids,
-            @Value("${modelhub.routing.preview.cutoff:}") String cutoff) {
+            @Value("${modelhub.routing.preview.cutoff:}") String cutoff,
+            @Value("${modelhub.routing.preview.verify-cloud:false}") boolean verifyCloud,
+            @Value("${modelhub.openrouter.endpoint}") String cloudEndpoint, ObjectMapper mapper) {
         this.catalog = catalog;
+        pricing = verifyCloud ? new OpenRouterPricing(mapper, cloudEndpoint) : null;
         this.repository = repository.getIfAvailable();
         this.cutoff = cutoff.isBlank() ? null : Instant.parse(cutoff.strip());
         var unique = new TreeSet<UUID>();
@@ -66,7 +71,18 @@ public class RoutingPreview {
                 }
             }
         }
-        return new RoutingPolicy().preview(Instant.now(), cutoff, catalog.dataset("2"), catalog.hash("2"),
+        var policy = new RoutingPolicy();
+        var decision = policy.preview(Instant.now(), cutoff, catalog.dataset("2"), catalog.hash("2"),
                 candidates, reports, excluded);
+        if (pricing == null || "EVIDENCE_UNAVAILABLE".equals(decision.reason())) return decision;
+        var cloud = decision.candidates().stream()
+                .filter(entry -> entry.reasons().equals(List.of("CLOUD_NOT_VERIFIED")))
+                .findFirst().orElse(null);
+        if (cloud == null) return decision;
+        var check = pricing.check(cloud.model());
+        var checked = candidates.stream().map(candidate -> cloud.provider().equals(candidate.provider())
+                && cloud.model().equals(candidate.model())
+                ? new Candidate(candidate.model(), candidate.provider(), candidate.timeout(), check) : candidate).toList();
+        return policy.preview(Instant.now(), cutoff, catalog.dataset("2"), catalog.hash("2"), checked, reports, excluded);
     }
 }
