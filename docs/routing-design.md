@@ -235,3 +235,26 @@ at most 60 seconds and each eligible preview checks the catalog afresh.
 This check applies to recommendations. Pricing, availability, and quota can
 change after the check. A future routed-generation endpoint needs its own
 dispatch-time safeguard.
+
+## Local routed generation
+
+Enable both `--modelhub.routing.preview.enabled=true` and
+`--modelhub.routing.generation.enabled=true`, then send
+`POST /api/routing/generate` with a JSON body:
+
+```json
+{"profile":"basic","prompt":"Explain how a database index works."}
+```
+
+The endpoint reads the configured reports and makes a new decision for each
+request. It returns `decision` and the standard `generation` result. A
+provider failure keeps the decision in the response and uses the same HTTP
+status as explicit generation. If the policy returns `NO_ROUTE`, the
+endpoint returns HTTP 503 with a null generation result. Each routed request
+can dispatch at most once and uses normal execution history when configured.
+
+This first dispatch policy is local-only. Fixed-free cloud candidates retain
+their evidence metrics and show `CLOUD_DISPATCH_DISABLED`, even when the
+separate preview can verify their pricing. Routed generation makes no catalog
+requests. Cloud dispatch remains a separate step requiring a fresh catalog
+check and a provider-side price constraint.

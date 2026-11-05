@@ -103,6 +103,15 @@ class RoutingPolicyTest {
         var decision = preview(List.of(LOCAL, checked(fresh)), reports);
         assertEquals(CLOUD.model(), decision.selectedModel());
         assertEquals(fresh.observedAt(), decision.candidates().getLast().pricingObservedAt());
+        var dispatch = new RoutingPolicy().evaluate(NOW, CUTOFF, catalog.dataset("2"), catalog.hash("2"),
+                List.of(LOCAL, checked(fresh)), reports, List.of(), true);
+        assertEquals(LOCAL.model(), dispatch.selectedModel());
+        assertEquals("EVIDENCE_SELECTED", dispatch.outcome());
+        assertEquals(List.of("CLOUD_DISPATCH_DISABLED"), dispatch.candidates().getLast().reasons());
+        var noLocal = new RoutingPolicy().evaluate(NOW, CUTOFF, catalog.dataset("2"), catalog.hash("2"),
+                List.of(checked(fresh)), reports, List.of(), true);
+        assertEquals("NO_ROUTE", noLocal.outcome());
+        assertNull(noLocal.selectedModel());
         for (var check : List.of(
                 new OpenRouterPricing.Check(CLOUD.model(), NOW.minusSeconds(61), null),
                 new OpenRouterPricing.Check(CLOUD.model(), NOW.plusSeconds(1), null),

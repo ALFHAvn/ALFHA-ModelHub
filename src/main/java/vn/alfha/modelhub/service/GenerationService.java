@@ -31,9 +31,12 @@ public class GenerationService {
     }
     public void validate(GenerateRequest request) {
         if (request == null || request.model() == null || request.model().isBlank()
-                || request.prompt() == null || request.prompt().isBlank() || request.prompt().length() > 32000)
+                || !validPrompt(request.prompt()))
             throw new IllegalArgumentException("Provide a model and a prompt of 1 to 32000 characters");
         providers.apply(request.model());
+    }
+    public static boolean validPrompt(String prompt) {
+        return prompt != null && !prompt.isBlank() && prompt.length() <= 32000;
     }
     public GenerateResponse generate(GenerateRequest request) {
         validate(request);

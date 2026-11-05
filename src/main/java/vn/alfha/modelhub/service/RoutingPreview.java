@@ -50,6 +50,14 @@ public class RoutingPreview {
     }
 
     public RoutingPolicy.Decision preview(String profile) {
+        return decide(profile, false);
+    }
+
+    public RoutingPolicy.Decision localDispatch(String profile) {
+        return decide(profile, true);
+    }
+
+    private RoutingPolicy.Decision decide(String profile, boolean localOnly) {
         if (!"basic".equals(profile)) throw new IllegalArgumentException("Unknown routing profile");
         var reports = new ArrayList<BenchmarkReport>();
         var excluded = new ArrayList<Exclusion>();
@@ -72,9 +80,9 @@ public class RoutingPreview {
             }
         }
         var policy = new RoutingPolicy();
-        var decision = policy.preview(Instant.now(), cutoff, catalog.dataset("2"), catalog.hash("2"),
-                candidates, reports, excluded);
-        if (pricing == null || "EVIDENCE_UNAVAILABLE".equals(decision.reason())) return decision;
+        var decision = policy.evaluate(Instant.now(), cutoff, catalog.dataset("2"), catalog.hash("2"),
+                candidates, reports, excluded, localOnly);
+        if (localOnly || pricing == null || "EVIDENCE_UNAVAILABLE".equals(decision.reason())) return decision;
         var cloud = decision.candidates().stream()
                 .filter(entry -> entry.reasons().equals(List.of("CLOUD_NOT_VERIFIED")))
                 .findFirst().orElse(null);

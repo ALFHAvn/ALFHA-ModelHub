@@ -31,11 +31,12 @@ class BenchmarkIT {
             var scheduledCloudCalls = new java.util.concurrent.atomic.AtomicInteger(-1);
             var cloudStarts = new java.util.concurrent.CopyOnWriteArrayList<Long>();
             var localAnswer = new java.util.concurrent.atomic.AtomicReference<>("42");
+            var localStatus = new java.util.concurrent.atomic.AtomicInteger(200);
             var mapper = new ObjectMapper();
             stub.createContext("/", exchange -> {
                 calls.incrementAndGet();
                 boolean cloud = exchange.getRequestURI().getPath().equals("/chat");
-                int status = cloud ? 500 : 200;
+                int status = cloud ? 500 : localStatus.get();
                 String body = cloud ? "private-error-body" : mapper.writeValueAsString(
                         java.util.Map.of("response", localAnswer.get(), "done", true));
                 if (cloud && scheduledCloudCalls.get() >= 0) {
@@ -65,6 +66,7 @@ class BenchmarkIT {
                      var client = HttpClient.newHttpClient()) {
                     String base = base(context);
                     assertEquals(404, get(client, base + "/api/routing/preview?profile=basic").statusCode());
+                    assertEquals(404, routed(client, base, "basic", "test").statusCode());
                     assertEquals(503, coding(client, base).statusCode());
                     assertEquals(0, calls.get());
                     var dataset = get(client, base + "/api/benchmarks/dataset");
@@ -155,7 +157,7 @@ class BenchmarkIT {
                             mapper.writeValueAsString(legacy), legacy.path("id").asString());
                 }
                 boolean realCodingRunner = Boolean.getBoolean("modelhub.test.coding-docker");
-                String[] restartArgs = java.util.Arrays.copyOf(args, args.length + 4);
+                String[] restartArgs = java.util.Arrays.copyOf(args, args.length + 5);
                 restartArgs[args.length] = "--modelhub.coding.runner=" + (realCodingRunner
                         ? "scripts/run-java-coding-pilot.ps1" : "target/nonexistent-coding-runner.ps1");
                 String approvedId = mapper.readTree(reportJson).path("id").asString();
@@ -163,6 +165,7 @@ class BenchmarkIT {
                 restartArgs[args.length + 1] = "--modelhub.routing.preview.enabled=true";
                 restartArgs[args.length + 2] = "--modelhub.routing.preview.cutoff=2020-01-01T00:00:00Z";
                 restartArgs[args.length + 3] = "--modelhub.routing.preview.report-ids=" + approvedId + "," + missingId;
+                restartArgs[args.length + 4] = "--modelhub.routing.generation.enabled=true";
                 try (var restarted = new SpringApplicationBuilder(ModelHubApplication.class).run(restartArgs);
                      var client = HttpClient.newHttpClient()) {
                     var retrieved = get(client, base(restarted) + reportPath);
@@ -195,6 +198,32 @@ class BenchmarkIT {
                         jdbc.update("UPDATE benchmark_reports SET report = ?::jsonb WHERE id = ?::uuid", reportJson, approvedId);
                     }
                     assertEquals(callsBeforePreview, calls.get());
+                    String routedBase = base(restarted);
+                    assertEquals(400, routed(client, routedBase, "basic", " ").statusCode());
+                    assertEquals(400, routed(client, routedBase, "unknown", "test").statusCode());
+                    assertEquals(callsBeforePreview, calls.get());
+                    var routed = routed(client, routedBase, "basic", "test");
+                    assertEquals(200, routed.statusCode(), routed.body());
+                    var routedResult = mapper.readTree(routed.body());
+                    assertEquals("FALLBACK_LOCAL", routedResult.path("decision").path("outcome").asString());
+                    assertEquals("CLOUD_DISPATCH_DISABLED", routedResult.path("decision")
+                            .path("candidates").path(1).path("reasons").path(0).asString());
+                    assertEquals("qwen3:4b", routedResult.path("generation").path("model").asString());
+                    assertEquals("42", routedResult.path("generation").path("response").asString());
+                    assertEquals(1L, jdbc.queryForObject("SELECT count(*) FROM execution_runs WHERE request_id = ?::uuid",
+                            Long.class, routedResult.path("generation").path("requestId").asString()));
+                    assertEquals(callsBeforePreview + 1, calls.get());
+                    localStatus.set(500);
+                    try {
+                        var failed = routed(client, routedBase, "basic", "test");
+                        assertEquals(502, failed.statusCode(), failed.body());
+                        var failedResult = mapper.readTree(failed.body());
+                        assertEquals("qwen3:4b", failedResult.path("decision").path("selectedModel").asString());
+                        assertEquals("FAILED", failedResult.path("generation").path("status").asString());
+                        assertEquals(callsBeforePreview + 2, calls.get());
+                    } finally {
+                        localStatus.set(200);
+                    }
                     assertEquals(1L, jdbc.queryForObject("SELECT count(*) FROM execution_runs WHERE model='legacy-model'", Long.class));
                     localAnswer.set("""
                             public class Main {
@@ -252,5 +281,11 @@ class BenchmarkIT {
                 .POST(HttpRequest.BodyPublishers.ofString("""
                         {"datasetId":"java-coding","datasetVersion":"1","models":["qwen3:4b","vendor/model:free"]}
                         """)).build(), HttpResponse.BodyHandlers.ofString());
+    }
+    private HttpResponse<String> routed(HttpClient client, String base, String profile, String prompt) throws Exception {
+        String body = new ObjectMapper().writeValueAsString(java.util.Map.of("profile", profile, "prompt", prompt));
+        return client.send(HttpRequest.newBuilder(URI.create(base + "/api/routing/generate"))
+                .timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
     }
 }

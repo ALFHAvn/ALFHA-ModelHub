@@ -43,6 +43,11 @@ public final class RoutingPolicy {
 
     Decision preview(Instant now, Instant cutoff, BenchmarkDataset dataset, String hash,
             List<Candidate> configured, List<BenchmarkReport> reports, List<Exclusion> unavailable) {
+        return evaluate(now, cutoff, dataset, hash, configured, reports, unavailable, false);
+    }
+
+    Decision evaluate(Instant now, Instant cutoff, BenchmarkDataset dataset, String hash,
+            List<Candidate> configured, List<BenchmarkReport> reports, List<Exclusion> unavailable, boolean localOnly) {
         var candidates = configured.stream().sorted(ID_ORDER).toList();
         var paired = candidates.stream().filter(Candidate::evidenceEligible).toList();
         var tasks = new HashSet<String>();
@@ -67,7 +72,8 @@ public final class RoutingPolicy {
             if (duplicate) exclusions.add(new Exclusion(report.id(), "DUPLICATE_EXECUTION"));
             return duplicate;
         });
-        var explanations = candidates.stream().map(candidate -> explain(candidate, valid, tasks.size(), now)).toList();
+        var explanations = candidates.stream()
+                .map(candidate -> explain(candidate, valid, tasks.size(), now, localOnly)).toList();
         var eligible = explanations.stream().filter(candidate -> candidate.reasons().isEmpty()).toList();
         var selected = exclusions.stream().anyMatch(e -> "EVIDENCE_UNAVAILABLE".equals(e.reason()))
                 ? null : rank(eligible);
@@ -81,7 +87,8 @@ public final class RoutingPolicy {
         } else {
             model = selected.model();
         }
-        return new Decision("basic", "basic-preview-v1", now, dataset.id(), dataset.version(), hash, cutoff,
+        return new Decision("basic", localOnly ? "basic-local-dispatch-v1" : "basic-preview-v1",
+                now, dataset.id(), dataset.version(), hash, cutoff,
                 outcome, model, reason, GATES,
                 valid.stream().map(BenchmarkReport::id).sorted().toList(),
                 exclusions.stream().distinct().sorted(Comparator.comparing(Exclusion::reportId,
@@ -135,7 +142,8 @@ public final class RoutingPolicy {
                 && PROVIDER_FAILURES.contains(execution.error().code());
     }
 
-    private Explanation explain(Candidate candidate, List<BenchmarkReport> reports, int taskCount, Instant now) {
+    private Explanation explain(Candidate candidate, List<BenchmarkReport> reports, int taskCount, Instant now,
+            boolean localOnly) {
         var rows = reports.stream().flatMap(report -> report.results().stream())
                 .filter(row -> candidate.model().equals(row.execution().model())).toList();
         int passed = (int) rows.stream().filter(row -> "PASS".equals(row.score())).count();
@@ -149,6 +157,7 @@ public final class RoutingPolicy {
                 attempts == 0 ? null : (double) scored / attempts, median(latencies));
         var reasons = new ArrayList<String>();
         if (!candidate.evidenceEligible()) reasons.add("MODEL_NOT_ELIGIBLE");
+        else if (!candidate.local() && localOnly) reasons.add("CLOUD_DISPATCH_DISABLED");
         else if (!candidate.local()) {
             String rejection = candidate.pricing() == null ? "CLOUD_NOT_VERIFIED"
                     : candidate.pricing().reason(candidate.model(), now);
