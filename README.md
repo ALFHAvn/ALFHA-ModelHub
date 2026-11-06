@@ -19,6 +19,9 @@ models. It is independent of ALFHA Agent.
 - Milestone 10 covers benchmark coverage and repeatability.
   [Evaluation protocol](docs/benchmark-repeatability.md)
 
+`v0.2.0` is planned for the completion of Milestone 10. Each completed
+milestone after 10 will receive its own versioned release.
+
 Docker Compose and GitHub Actions are included. The validation notes describe
 which behaviors have been exercised with live providers. [Validation](docs/validation.md)
 

@@ -2,15 +2,20 @@
 param(
     [Parameter(Mandatory)][string]$SourcePath,
     [ValidateRange(1, 30)][int]$TimeoutSeconds = 8,
-    [ValidatePattern('^[a-f0-9]{32}$')][string]$RunId = [guid]::NewGuid().ToString('N')
+    [ValidatePattern('^[a-f0-9]{32}$')][string]$RunId = [guid]::NewGuid().ToString('N'),
+    [switch]$RegressionTest
 )
 
 $ErrorActionPreference = 'Stop'
 $imageTag = 'eclipse-temurin:21-jdk-alpine'
-$taskPath = Join-Path $PSScriptRoot '../src/main/resources/benchmarks/java-coding-v1.json'
+$taskPath = if ($RegressionTest) {
+    Join-Path $PSScriptRoot '../benchmarks/held-out/regression-test-v1.json'
+} else {
+    Join-Path $PSScriptRoot '../src/main/resources/benchmarks/java-coding-v1.json'
+}
 $taskJson = (Get-Content -LiteralPath $taskPath -Raw).Replace("`r`n", "`n")
 $dataset = $taskJson | ConvertFrom-Json
-$task = $dataset.tasks[0]
+$task = if ($RegressionTest) { $dataset } else { $dataset.tasks[0] }
 $sourceFile = Get-Item -LiteralPath $SourcePath
 if ($sourceFile -isnot [System.IO.FileInfo] -or $sourceFile.Length -gt 16384) {
     throw 'Supply a Java source file of at most 16 KiB.'
@@ -24,10 +29,32 @@ $image = & $docker image inspect --format '{{.Id}}' $imageTag
 if ($LASTEXITCODE -ne 0) { throw "Pull $imageTag before running the pilot." }
 
 function Invoke-IsolatedCase($case) {
+    $command = 'cat > /tmp/Main.java || exit 67; javac -J-Xmx96m -J-XX:ActiveProcessorCount=1 -J-XX:-UsePerfData -proc:none -d /tmp /tmp/Main.java || exit 65; java -Xmx96m -XX:ActiveProcessorCount=1 -XX:-UsePerfData -cp /tmp Main "$@" || exit 66'
+    $caseArgs = @($case.args)
+    if ($RegressionTest) {
+        $harness = @'
+final class Harness {
+    public static void main(String[] args) {
+        String result;
+        try {
+            Main.check();
+            result = "test-passed";
+        } catch (AssertionError failure) {
+            result = "assertion-failed";
+        }
+        System.out.println(result);
+    }
+}
+'@
+        $caseArgs = @($case.fixture, $harness) | ForEach-Object {
+            [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($_))
+        }
+        $command = 'cat > /tmp/Main.java && printf %s "$1" | base64 -d > /tmp/Shipping.java && printf %s "$2" | base64 -d > /tmp/Harness.java || exit 67; javac -J-Xmx96m -J-XX:ActiveProcessorCount=1 -J-XX:-UsePerfData -proc:none -d /tmp /tmp/Main.java /tmp/Shipping.java /tmp/Harness.java || exit 65; java -Xmx96m -XX:ActiveProcessorCount=1 -XX:-UsePerfData -cp /tmp Harness || exit 66'
+    }
     $container = & $docker create --name "modelhub-coding-$RunId-$($case.id)" --pull never --interactive --network none --read-only --user '65534:65534' `
         --cap-drop ALL --security-opt no-new-privileges --cpus 1 --memory 256m --memory-swap 256m `
         --pids-limit 64 --log-driver none --tmpfs '/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777' `
-        --entrypoint /bin/sh $image -c 'cat > /tmp/Main.java || exit 67; javac -J-Xmx96m -J-XX:ActiveProcessorCount=1 -J-XX:-UsePerfData -proc:none -d /tmp /tmp/Main.java || exit 65; java -Xmx96m -XX:ActiveProcessorCount=1 -XX:-UsePerfData -cp /tmp Main "$@" || exit 66' pilot @($case.args)
+        --entrypoint /bin/sh $image -c $command pilot @caseArgs
     if ($LASTEXITCODE -ne 0) { throw 'Could not create the evaluation container.' }
 
     $process = [System.Diagnostics.Process]::new()

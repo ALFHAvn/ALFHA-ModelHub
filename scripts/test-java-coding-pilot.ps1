@@ -20,6 +20,22 @@ public class Main {
     Write-Output "Verified $expected on six cases."
 }
 
+function Assert-Regression([string]$body, [string]$reference, [string]$mutant) {
+    Set-Content -LiteralPath $sourcePath -Encoding utf8NoBOM -Value @"
+public class Main {
+    public static void check() {
+        $body
+    }
+}
+"@
+    $report = & $runner -SourcePath $sourcePath -RegressionTest | ConvertFrom-Json
+    if ($report.taskId -cne 'shipping-threshold-regression' -or $report.results.Count -ne 2 -or
+        $report.results[0].outcome -cne $reference -or $report.results[1].outcome -cne $mutant) {
+        throw "Expected $reference, $mutant. Observed: $($report.results.outcome -join ', ')"
+    }
+    Write-Output "Verified regression outcomes $reference, $mutant."
+}
+
 try {
     Assert-Outcome @'
 if (java.nio.file.Files.exists(java.nio.file.Path.of("/var/run/docker.sock"))
@@ -56,6 +72,10 @@ System.out.println(values[1]);
     Assert-Outcome 'System.exit(65);' 'EXECUTION_ERROR'
     Assert-Outcome 'while (true) Thread.sleep(100);' 'TIMEOUT' 2
     Assert-Outcome 'while (true) System.out.println("x".repeat(2048));' 'OUTPUT_LIMIT'
+    Assert-Regression 'if (Shipping.fee(5000) != 0) throw new AssertionError();' 'PASS' 'PASS'
+    Assert-Regression 'if (Shipping.fee(4999) != 499) throw new AssertionError();' 'PASS' 'WRONG_ANSWER'
+    Assert-Regression 'throw new AssertionError();' 'WRONG_ANSWER' 'PASS'
+    Assert-Regression 'throw new IllegalStateException();' 'EXECUTION_ERROR' 'EXECUTION_ERROR'
 } finally {
     if (Test-Path -LiteralPath $sourcePath) { Remove-Item -LiteralPath $sourcePath }
     Remove-Item -LiteralPath $directory

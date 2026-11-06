@@ -1,0 +1,18 @@
+{
+  "id": "shipping-threshold-regression",
+  "version": "1",
+  "family": "test-regression-fixture",
+  "prompt": "Write one Java 21 source file with a public class Main and a public static void check() method. Test the supplied Shipping.fee(int subtotalCents) method for nonnegative subtotals. Shipping costs 499 cents below 5000 cents and is free at 5000 cents or more. Throw AssertionError when an observed fee violates the contract and return normally when it holds. Call Shipping.fee directly. Submit Main only, with no package declaration.",
+  "cases": [
+    {
+      "id": "reference",
+      "fixture": "final class Shipping { static int fee(int subtotalCents) { return subtotalCents >= 5000 ? 0 : 499; } }",
+      "expected": "test-passed"
+    },
+    {
+      "id": "boundary-mutant",
+      "fixture": "final class Shipping { static int fee(int subtotalCents) { return subtotalCents > 5000 ? 0 : 499; } }",
+      "expected": "assertion-failed"
+    }
+  ]
+}

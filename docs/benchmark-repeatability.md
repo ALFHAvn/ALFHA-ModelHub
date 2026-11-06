@@ -140,5 +140,25 @@ any development counterparts.
 | `sql-window-tiebreaker` | Author a window query and compare result rows across fixtures containing ties and sparse groups. |
 | `api-concurrent-capacity` | Implement or diagnose a capacity invariant under concurrent reservations. Grade the resulting state and response contract with a controlled schedule. |
 
-These are reservations for future task authoring. Freeze the family assignments
-and graders before collecting held-out results.
+The regression fixture now has an offline Java pilot. Give the prompt to the
+candidate and save its Java source as `Main.java`. Run the grader from the
+repository root with the same locally available Docker image used by the
+Java coding pilot.
+
+```powershell
+./scripts/run-java-coding-pilot.ps1 -RegressionTest -SourcePath ./Main.java
+```
+
+The grader runs the submitted test in separate restricted containers against
+the reference and a boundary mutant. Both reported cases must pass. The
+reference expects the test to return normally, and the mutant expects an
+`AssertionError`. Compilation errors and other exceptions fail the case.
+The JSON fixture includes the prompt and both implementations, so share
+only the prompt with candidates during collection. The sandbox limits host
+access. The fixture and harness share the candidate's process, so the result
+assumes cooperative submissions. This pilot measures one seeded bug and
+currently produces a local grader report outside the benchmark API.
+
+The remaining families are reserved for future tasks. Freeze family
+assignments and graders before collecting held-out results.
+[Regression fixture](../benchmarks/held-out/regression-test-v1.json)
