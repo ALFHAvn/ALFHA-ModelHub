@@ -95,6 +95,26 @@ It rejects repeated report or execution IDs, overlapping report intervals,
 and shared prompt text after trimming and normalizing line endings. Older
 reports with a terminal execution and no attempt list are supported. The
 check assumes a serial collection protocol and reads only exported reports.
-Review scenario families and collection provenance separately to catch
-paraphrases, rewritten identities, and correlated runs. Dataset expansion
-and scorer changes remain separate steps.
+
+For a reviewed campaign, add `-CampaignPath ./campaign.json`. The manifest
+contains these fields.
+
+| Field | Contents |
+| --- | --- |
+| `id` | Campaign identifier. |
+| `policyFrozenAt` | Time the policy and analysis plan were frozen. |
+| `windows` | Array of objects with `id`, `split` (`development` or `evaluation`), `startedAt`, and `completedAt`. Use ISO 8601 timestamps with an explicit offset. |
+| `datasets` | Array of objects with `id`, `version`, `sha256` from the report, and `families`, an object mapping each task ID to a reviewed family slug. |
+
+Assign the same family slug to paraphrases and variants that test the same
+underlying scenario, including across dataset versions. For example, use
+`api-idempotency-replay` for variants of a replay scenario. Each split must
+contain reports from at least two nonoverlapping declared windows. Development
+windows end by the policy freeze and evaluation windows start at or after it.
+Every report must fit within one window for its split. The checker rejects a
+family present in both splits.
+
+The manifest records operator assertions. Review assignments and source
+provenance for misclassified scenarios, rewritten identities, and correlated
+runs. The checker matches the recorded dataset hash and does not authenticate
+it. Sample size, model reliability, and scorer checks belong to cohort review.
