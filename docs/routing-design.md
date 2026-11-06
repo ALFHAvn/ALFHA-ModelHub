@@ -66,6 +66,10 @@ denominator. First-attempt measurements still reflect the paced workload and
 cannot be pooled with the unpaced profile. The current routing policy keeps
 excluding scheduled reports. [Offline paced diagnostics](benchmarks.md)
 
+The offline `paced-cohort-v1` checker tests the cloud first-attempt gates
+on matched `basics` v2 reports. This is a diagnostic for planning evidence
+collection. Runtime routing eligibility continues to use the unpaced policy.
+
 Routing policy v2 re-scores successful responses against the registered
 task using the benchmark's objective scorer. A disagreement with a stored
 PASS or FAIL excludes the paired report as `SCORE_MISMATCH`. The check leaves

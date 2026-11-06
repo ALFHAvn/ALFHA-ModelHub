@@ -100,6 +100,22 @@ outcomes, counts retry recoveries and extra provider calls, and reports
 skipped tasks separately. Other first-attempt failures can include both
 provider and application errors. The script reads the report from disk.
 
+To evaluate a paced `basics` v2 cohort offline, pass the report paths as a
+PowerShell array:
+
+```powershell
+./scripts/check-paced-evidence.ps1 -ReportPath @('./run-1.json', './run-2.json', './run-3.json')
+./scripts/test-paced-evidence.ps1
+```
+
+The cohort must share the same schedule, dataset identity and recorded hash,
+scorer, model configuration, and deployment ID. The first-attempt gates
+require a deployment ID, at least three reports and 30 cloud attempts, at
+least 24 first-attempt responses, at least 80% first-attempt reliability,
+and full cloud coverage without first-attempt operational errors. Recovered
+responses are counted separately. The checker trusts recorded scores and
+metadata, does not check freshness, and does not select a route.
+
 The ignored `.env` must contain the database password and OpenRouter API key.
 The script temporarily overrides the cloud model/enabled flag and port only in
 its own process, leaving `.env` unchanged. Expanded Compose configuration and

@@ -1,10 +1,15 @@
+[CmdletBinding(DefaultParameterSetName = 'File')]
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$ReportPath
+    [Parameter(Mandatory = $true, ParameterSetName = 'File')]
+    [string]$ReportPath,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Snapshot')]
+    [pscustomobject]$Report
 )
 
 $ErrorActionPreference = 'Stop'
-$report = Get-Content -LiteralPath $ReportPath -Raw | ConvertFrom-Json
+if ($PSCmdlet.ParameterSetName -eq 'File') {
+    $report = Get-Content -LiteralPath $ReportPath -Raw | ConvertFrom-Json
+}
 $cloud = @($report.models | Where-Object provider -CEQ 'openrouter')
 if ($null -eq $report.schedule -or $report.scoringVersion -cne 'objective-v1' -or $cloud.Count -ne 1) {
     throw 'Expected a paced objective benchmark report with exactly one OpenRouter model.'
@@ -20,6 +25,7 @@ foreach ($id in $skipped) {
 
 $firstSuccess = $firstRateLimited = $firstOtherFailure = $retried = $recovered = $terminalSuccess = 0
 $firstPass = $terminalPass = $totalCalls = 0
+$firstProviderFailures = $firstOtherErrors = 0
 foreach ($row in $rows) {
     if ($row.taskId -cnotin $taskIds -or -not $seen.Add($row.taskId)) {
         throw "Unknown, duplicate, or skipped cloud result: $($row.taskId)"
@@ -37,8 +43,14 @@ foreach ($row in $rows) {
         if ($row.score -ceq 'PASS') { $firstPass++ }
     } elseif ($first.error.code -ceq 'RATE_LIMITED') {
         $firstRateLimited++
+        $firstProviderFailures++
     } else {
         $firstOtherFailure++
+        if ($first.error.code -cin @('TIMEOUT', 'CONNECTION_FAILURE', 'PROVIDER_ERROR', 'INVALID_PROVIDER_RESPONSE')) {
+            $firstProviderFailures++
+        } else {
+            $firstOtherErrors++
+        }
     }
     if ($row.execution.status -ceq 'SUCCESS') {
         $terminalSuccess++
@@ -66,6 +78,8 @@ if ($seen.Count -ne $taskIds.Count) { throw 'Cloud results and skips do not cove
     FirstAttemptPasses = $firstPass
     FirstAttemptRateLimits = $firstRateLimited
     FirstAttemptOtherFailures = $firstOtherFailure
+    FirstAttemptProviderFailures = $firstProviderFailures
+    FirstAttemptOperationalErrors = $firstOtherErrors
     TasksRetried = $retried
     TasksRecovered = $recovered
     RetryCalls = $totalCalls - $rows.Count
