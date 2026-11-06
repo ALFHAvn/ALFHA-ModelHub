@@ -52,6 +52,22 @@ public class Main {
     Write-Output "Verified configuration propagation outcomes $outcomes."
 }
 
+function Assert-ConcurrentCapacity([string]$body, [string]$expected) {
+    Set-Content -LiteralPath $sourcePath -Encoding utf8NoBOM -Value @"
+public class Main {
+    public static int reserve(Capacity capacity) {
+        $body
+    }
+}
+"@
+    $report = & $runner -SourcePath $sourcePath -ConcurrentCapacity | ConvertFrom-Json
+    $outcomes = $report.results.outcome -join ','
+    if ($report.taskId -cne 'concurrent-capacity-reservation' -or $outcomes -cne $expected) {
+        throw "Unexpected concurrent capacity outcomes: $outcomes"
+    }
+    Write-Output "Verified concurrent capacity outcomes $outcomes."
+}
+
 try {
     Assert-Outcome @'
 if (java.nio.file.Files.exists(java.nio.file.Path.of("/var/run/docker.sock"))
@@ -102,6 +118,23 @@ try {
 }
 '@
     Assert-ConfigPropagation $clampAndDefault @('PASS', 'WRONG_ANSWER', 'PASS', 'WRONG_ANSWER', 'WRONG_ANSWER')
+    Assert-ConcurrentCapacity @'
+while (true) {
+    int observed = capacity.available();
+    if (observed == 0) return 409;
+    if (capacity.compareAndSet(observed, observed - 1)) return 201;
+}
+'@ 'PASS,PASS,PASS'
+    Assert-ConcurrentCapacity @'
+int observed = capacity.available();
+if (observed == 0) return 409;
+capacity.set(observed - 1);
+return 201;
+'@ 'PASS,WRONG_ANSWER,WRONG_ANSWER'
+    Assert-ConcurrentCapacity @'
+int observed = capacity.available();
+return observed > 0 && capacity.compareAndSet(observed, observed - 1) ? 201 : 409;
+'@ 'PASS,PASS,WRONG_ANSWER'
 } finally {
     if (Test-Path -LiteralPath $sourcePath) { Remove-Item -LiteralPath $sourcePath }
     Remove-Item -LiteralPath $directory

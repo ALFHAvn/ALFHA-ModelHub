@@ -1,0 +1,34 @@
+{
+  "id": "concurrent-capacity-reservation",
+  "version": "1",
+  "family": "api-concurrent-capacity",
+  "prompt": "Write one Java 21 source file with a public class Main and public static int reserve(Capacity capacity). Each successful request claims one slot and returns 201. Return 409 only when no slots remain. The supplied Capacity has int available(), boolean compareAndSet(int observed, int updated), and void set(int updated). Use a lock-free compare-and-set loop. Calls to available() may observe the same count across threads. After a failed compare-and-set, read the count again and retry as needed. Submit Main.java only, without a package.",
+  "fixture": "final class Capacity {\n    private final java.util.concurrent.atomic.AtomicInteger remaining;\n    private final java.util.concurrent.CyclicBarrier firstReads;\n    private final ThreadLocal<Boolean> firstRead = ThreadLocal.withInitial(() -> true);\n\n    Capacity(int slots, int callers) {\n        remaining = new java.util.concurrent.atomic.AtomicInteger(slots);\n        firstReads = new java.util.concurrent.CyclicBarrier(callers);\n    }\n\n    int available() {\n        int snapshot = remaining.get();\n        if (firstRead.get()) {\n            firstRead.set(false);\n            try {\n                firstReads.await(2, java.util.concurrent.TimeUnit.SECONDS);\n            } catch (InterruptedException failure) {\n                Thread.currentThread().interrupt();\n                throw new IllegalStateException(failure);\n            } catch (java.util.concurrent.BrokenBarrierException | java.util.concurrent.TimeoutException failure) {\n                throw new IllegalStateException(failure);\n            }\n        }\n        return snapshot;\n    }\n\n    boolean compareAndSet(int observed, int updated) {\n        return remaining.compareAndSet(observed, updated);\n    }\n\n    void set(int updated) { remaining.set(updated); }\n    int remaining() { return remaining.get(); }\n}",
+  "harness": "final class Harness {\n    public static void main(String[] args) throws Exception {\n        int slots = Integer.parseInt(args[0]);\n        int callers = Integer.parseInt(args[1]);\n        var capacity = new Capacity(slots, callers);\n        try (var workers = java.util.concurrent.Executors.newFixedThreadPool(callers)) {\n            var responses = new java.util.ArrayList<java.util.concurrent.Future<Integer>>();\n            for (int i = 0; i < callers; i++) {\n                responses.add(workers.submit(() -> Main.reserve(capacity)));\n            }\n            var statuses = new java.util.ArrayList<Integer>();\n            for (var response : responses) {\n                statuses.add(response.get(3, java.util.concurrent.TimeUnit.SECONDS));\n            }\n            statuses.sort(Integer::compareTo);\n            System.out.println(statuses + \":\" + capacity.remaining());\n        }\n    }\n}",
+  "cases": [
+    {
+      "id": "exhausted",
+      "args": [
+        "0",
+        "1"
+      ],
+      "expected": "[409]:0"
+    },
+    {
+      "id": "last-slot",
+      "args": [
+        "1",
+        "2"
+      ],
+      "expected": "[201, 409]:0"
+    },
+    {
+      "id": "retry-with-capacity",
+      "args": [
+        "2",
+        "2"
+      ],
+      "expected": "[201, 201]:0"
+    }
+  ]
+}

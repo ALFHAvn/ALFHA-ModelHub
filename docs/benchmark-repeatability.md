@@ -192,5 +192,19 @@ The container caps resources and output. Both cases must pass. Share only
 the prompt with candidates during collection.
 [SQL fixture](../benchmarks/held-out/sql-window-v1.json)
 
-The concurrent API family remains reserved for a future task. Freeze family
-assignments and graders before collecting held-out results.
+The concurrent API pilot grades the reservation method behind a capacity
+endpoint. A barrier forces two callers to observe the same initial capacity.
+The grader checks response statuses and remaining slots with an exhausted
+store, one slot under contention, and two slots where a failed compare and
+set must be retried. All three cases must pass.
+
+```powershell
+./scripts/run-java-coding-pilot.ps1 -ConcurrentCapacity -SourcePath ./Main.java
+```
+
+The pilot uses the restricted Java runner and an offline report. It measures
+one lock-free contract under a controlled schedule and assumes cooperative
+submissions. Share only the prompt during collection.
+[Concurrent capacity fixture](../benchmarks/held-out/concurrent-capacity-v1.json)
+
+Freeze family assignments and graders before collecting held-out results.
