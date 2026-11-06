@@ -238,3 +238,11 @@ locally generated grader results.
 For the v0.2.0 review, distinguish fixture verification from a held-out
 model campaign. A release candidate still needs collected evidence under
 the frozen protocol and a review of release notes and version metadata.
+
+On 6 November 2026, a single local workflow smoke test used the installed
+Ollama model `qwen2.5-coder:3b-instruct-q4_K_M` for the SQL task. ModelHub
+saved the successful generation after 32,753 ms and the exporter preserved
+its request ID. The response included prose and a Markdown fence around its
+query. Both PostgreSQL cases returned `QUERY_ERROR` when graded on the exact
+response, and the export recorded `FAIL`. This exploratory run exercised
+the live collection path and falls outside the frozen evaluation campaign.
