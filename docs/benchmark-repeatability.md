@@ -85,5 +85,16 @@ interpreting small differences.
 ## First implementation step
 
 Milestone 10B starts with an offline check for split leakage and reused
-executions in saved reports. Dataset family review, run-window provenance,
-coverage expansion, and scoring improvements remain separate steps.
+executions in saved reports. Run it from the repository root in PowerShell:
+
+```powershell
+./scripts/check-benchmark-splits.ps1 -DevelopmentReportPath @('./dev-1.json', './dev-2.json') -EvaluationReportPath './eval-1.json'
+```
+
+It rejects repeated report or execution IDs, overlapping report intervals,
+and shared prompt text after trimming and normalizing line endings. Older
+reports with a terminal execution and no attempt list are supported. The
+check assumes a serial collection protocol and reads only exported reports.
+Review scenario families and collection provenance separately to catch
+paraphrases, rewritten identities, and correlated runs. Dataset expansion
+and scorer changes remain separate steps.
