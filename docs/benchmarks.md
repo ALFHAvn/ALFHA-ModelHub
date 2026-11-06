@@ -89,6 +89,17 @@ The first live run with this policy recovered five of six rate-limited tasks
 on retry. The report compares recovery, request count, and elapsed time with
 the earlier unpaced runs. [Live paced comparison](../benchmarks/comparisons/2026-11-06-qwen3-vs-lfm25-v2-paced/README.md)
 
+Inspect any saved paced objective report locally from PowerShell:
+
+```powershell
+./scripts/summarize-paced-benchmark.ps1 -ReportPath ./benchmarks/comparisons/2026-11-06-qwen3-vs-lfm25-v2-paced/run-1.json
+```
+
+The summary separates first-attempt successes and passes from terminal
+outcomes, counts retry recoveries and extra provider calls, and reports
+skipped tasks separately. Other first-attempt failures can include both
+provider and application errors. The script reads the report from disk.
+
 The ignored `.env` must contain the database password and OpenRouter API key.
 The script temporarily overrides the cloud model/enabled flag and port only in
 its own process, leaving `.env` unchanged. Expanded Compose configuration and

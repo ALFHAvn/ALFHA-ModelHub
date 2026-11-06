@@ -57,6 +57,15 @@ ambiguous rows, duplicate execution IDs across reports, incomplete reports,
 and future completion times. Filter out reports completed before the
 configuration cutoff or more than 14 days before the decision clock.
 
+Paced evidence needs a separate policy. Compare reports with the same
+schedule, and measure first-attempt availability and correctness separately
+from retry recovery. A retry response contributes to terminal benchmark
+metrics only. A skipped task records missing coverage without counting as a
+provider attempt. Keep application errors outside the provider reliability
+denominator. First-attempt measurements still reflect the paced workload and
+cannot be pooled with the unpaced profile. The current routing policy keeps
+excluding scheduled reports. [Offline paced diagnostics](benchmarks.md)
+
 Routing policy v2 re-scores successful responses against the registered
 task using the benchmark's objective scorer. A disagreement with a stored
 PASS or FAIL excludes the paired report as `SCORE_MISMATCH`. The check leaves
