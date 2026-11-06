@@ -3,10 +3,12 @@ package vn.alfha.modelhub.dto;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 public record BenchmarkReport(UUID id, Instant startedAt, Instant completedAt, String datasetSha256,
         String scoringVersion, BenchmarkDataset dataset, List<ModelConfig> models,
-        List<Result> results, List<Summary> summaries, BenchmarkSchedule schedule, List<String> skippedCloudTasks) {
+        List<Result> results, List<Summary> summaries, BenchmarkSchedule schedule, List<String> skippedCloudTasks,
+        @JsonInclude(JsonInclude.Include.NON_NULL) String deploymentId) {
     public BenchmarkReport {
         skippedCloudTasks = skippedCloudTasks == null ? List.of() : List.copyOf(skippedCloudTasks);
     }

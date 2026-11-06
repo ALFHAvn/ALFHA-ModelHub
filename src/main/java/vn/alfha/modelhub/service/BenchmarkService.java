@@ -21,17 +21,19 @@ public class BenchmarkService {
     private final BenchmarkRepository repository;
     private final String localTimeout;
     private final String cloudTimeout;
+    private final BenchmarkDeployment deployment;
     private final Semaphore slot = new Semaphore(1);
 
     public BenchmarkService(BenchmarkCatalog catalog, GenerationService generation, ComparisonService comparison,
             ObjectiveScorer scorer, DockerCodingEvaluator codingEvaluator, ModelRegistry registry,
             ObjectProvider<BenchmarkRepository> repository,
             @Value("${modelhub.ollama.timeout}") String localTimeout,
-            @Value("${modelhub.openrouter.timeout}") String cloudTimeout) {
+            @Value("${modelhub.openrouter.timeout}") String cloudTimeout, BenchmarkDeployment deployment) {
         this.catalog = catalog; this.generation = generation; this.comparison = comparison;
         this.scorer = scorer; this.codingEvaluator = codingEvaluator;
         this.registry = registry; this.repository = repository.getIfAvailable();
         this.localTimeout = localTimeout; this.cloudTimeout = cloudTimeout;
+        this.deployment = deployment;
     }
     public BenchmarkReport run(BenchmarkRequest request) {
         if (request == null || request.models() == null
@@ -99,7 +101,7 @@ public class BenchmarkService {
             var report = new BenchmarkReport(UUID.randomUUID(), started, Instant.now(),
                     catalog.hash(dataset.id(), dataset.version()), coding ? "java-coding-v1" : "objective-v1",
                     dataset, configs, List.copyOf(results), selected.stream().map(model -> summarize(model, results)).toList(),
-                    request.schedule(), skippedCloudTasks);
+                    request.schedule(), skippedCloudTasks, deployment.id());
             repository.save(report);
             return report;
         } finally { slot.release(); }

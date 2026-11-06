@@ -30,7 +30,7 @@ class BenchmarkServiceTest {
         });
         return new BenchmarkService(new BenchmarkCatalog(mapper), generation, new ComparisonService(generation),
                 new ObjectiveScorer(mapper), new DockerCodingEvaluator(mapper, ""), registry,
-                beans.getBeanProvider(BenchmarkRepository.class), "120s", "120s");
+                beans.getBeanProvider(BenchmarkRepository.class), "120s", "120s", new BenchmarkDeployment(""));
     }
     @Test void separatesScoringFromProviderFailuresAndRetainsEveryAttempt() throws Exception {
         var catalog = new BenchmarkCatalog(mapper);

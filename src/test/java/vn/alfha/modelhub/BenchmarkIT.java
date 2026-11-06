@@ -54,6 +54,7 @@ class BenchmarkIT {
             stub.start();
             String origin = "http://localhost:" + stub.getAddress().getPort();
             String[] args = {"--server.port=0", "--spring.autoconfigure.exclude=", "--modelhub.history.enabled=true",
+                    "--modelhub.benchmark.deployment-id=local-fixture-1",
                     "--spring.datasource.url=" + postgres.getJdbcUrl(), "--spring.datasource.username=" + postgres.getUsername(),
                     "--spring.datasource.password=" + postgres.getPassword(), "--modelhub.ollama.model=qwen3:4b",
                     "--modelhub.ollama.base-url=" + origin, "--modelhub.openrouter.enabled=true",
@@ -84,6 +85,7 @@ class BenchmarkIT {
                     reportPath = created.headers().firstValue("Location").orElseThrow();
                     var report = mapper.readTree(reportJson);
                     assertEquals("2", report.path("dataset").path("version").asString());
+                    assertEquals("local-fixture-1", report.path("deploymentId").asString());
                     assertEquals(20, report.path("results").size());
                     assertEquals(1, report.path("summaries").path(0).path("passed").asInt());
                     assertEquals(10, report.path("summaries").path(1).path("failed").asInt());
@@ -188,6 +190,23 @@ class BenchmarkIT {
                     assertEquals(400, get(client, previewUrl + "unknown").statusCode());
                     assertEquals(400, get(client, base(restarted) + "/api/routing/preview").statusCode());
                     try {
+                        for (String reason : java.util.List.of("DEPLOYMENT_ID_MISSING", "DEPLOYMENT_ID_MISMATCH")) {
+                            var unverified = (tools.jackson.databind.node.ObjectNode) mapper.readTree(reportJson);
+                            if ("DEPLOYMENT_ID_MISSING".equals(reason)) unverified.remove("deploymentId");
+                            else unverified.put("deploymentId", "previous-fixture");
+                            jdbc.update("UPDATE benchmark_reports SET report = ?::jsonb WHERE id = ?::uuid",
+                                    mapper.writeValueAsString(unverified), approvedId);
+                            var historical = get(client, base(restarted) + reportPath);
+                            assertEquals(200, historical.statusCode());
+                            assertEquals(unverified, mapper.readTree(historical.body()));
+                            var filtered = get(client, previewUrl + "basic");
+                            assertEquals(200, filtered.statusCode(), filtered.body());
+                            var filteredDecision = mapper.readTree(filtered.body());
+                            assertEquals(0, filteredDecision.path("reportIds").size());
+                            assertTrue(filteredDecision.path("exclusions").valueStream().anyMatch(exclusion ->
+                                    approvedId.equals(exclusion.path("reportId").asString())
+                                            && reason.equals(exclusion.path("reason").asString())));
+                        }
                         var altered = mapper.readTree(reportJson);
                         var firstRow = (tools.jackson.databind.node.ObjectNode) altered.path("results").path(0);
                         assertEquals("PASS", firstRow.path("score").asString());

@@ -155,10 +155,10 @@ class RoutingPolicyTest {
                 LOCAL.model(), true, CLOUD.model());
         String ids = String.join(",", reports.stream().map(report -> report.id().toString()).toList());
         var disabled = new RoutingPreview(catalog, repository, registry, LOCAL.timeout(), CLOUD.timeout(), ids,
-                completed.minusSeconds(60).toString(), false, false, pricing, scorer);
+                completed.minusSeconds(60).toString(), false, false, pricing, scorer, new BenchmarkDeployment(""));
         assertEquals(LOCAL.model(), disabled.dispatch("basic").selectedModel());
         var enabled = new RoutingPreview(catalog, repository, registry, LOCAL.timeout(), CLOUD.timeout(), ids,
-                completed.minusSeconds(60).toString(), false, true, pricing, scorer);
+                completed.minusSeconds(60).toString(), false, true, pricing, scorer, new BenchmarkDeployment(""));
         assertEquals(LOCAL.model(), enabled.preview("basic").selectedModel());
         assertEquals(0, pricingCalls.get());
         assertEquals(CLOUD.model(), enabled.dispatch("basic").selectedModel());
@@ -229,7 +229,7 @@ class RoutingPolicyTest {
             results.add(new Result(taskId, cloud, failed ? "NOT_SCORED" : "PASS", List.of(cloud), null));
         }
         return new BenchmarkReport(new UUID(0, id), completed.minusSeconds(10), completed, catalog.hash("2"),
-                "objective-v1", dataset, List.of(config(LOCAL), config(CLOUD)), results, List.of(), null, List.of());
+                "objective-v1", dataset, List.of(config(LOCAL), config(CLOUD)), results, List.of(), null, List.of(), null);
     }
 
     private ModelConfig config(Candidate candidate) {
@@ -239,6 +239,6 @@ class RoutingPolicyTest {
     private BenchmarkReport copy(BenchmarkReport original, UUID id, Instant completed, String hash, String scorer,
             BenchmarkSchedule schedule, List<ModelConfig> models, List<Result> rows) {
         return new BenchmarkReport(id, completed.minusSeconds(10), completed, hash, scorer, original.dataset(),
-                models, rows, List.of(), schedule, List.of());
+                models, rows, List.of(), schedule, List.of(), original.deploymentId());
     }
 }

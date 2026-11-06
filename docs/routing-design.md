@@ -62,6 +62,21 @@ task using the benchmark's objective scorer. A disagreement with a stored
 PASS or FAIL excludes the paired report as `SCORE_MISMATCH`. The check leaves
 the stored report intact. Report provenance still relies on operator curation.
 
+Set `--modelhub.benchmark.deployment-id=local-qwen-openrouter-r1` on the
+Spring Boot process that creates and consumes reports, or set
+`MODELHUB_BENCHMARK_DEPLOYMENT_ID` in that process's environment. Use a
+non-secret ID of 1–64 letters, digits, dots, underscores or hyphens, starting
+with a letter or digit. New reports record it as `deploymentId` in the
+existing PostgreSQL JSON snapshot. When configured, routing excludes untagged
+reports as `DEPLOYMENT_ID_MISSING` and different IDs as
+`DEPLOYMENT_ID_MISMATCH`. History and report retrieval still read older
+reports. Leaving the ID unset preserves existing routing eligibility.
+
+Change the ID and advance the cutoff when the provider endpoint, model
+revision, or serving configuration changes. The ID records the operator's
+deployment boundary. It cannot establish model weights, distinguish a live
+provider from a stub, or authenticate report contents.
+
 ### Metrics and ranking
 
 For each model, use the same report set and profile task IDs. Compute the

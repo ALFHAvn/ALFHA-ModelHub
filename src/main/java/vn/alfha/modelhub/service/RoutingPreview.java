@@ -31,6 +31,7 @@ public class RoutingPreview {
     private final boolean verifyCloud;
     private final boolean allowCloudDispatch;
     private final RoutingPolicy policy;
+    private final BenchmarkDeployment deployment;
 
     @Autowired
     public RoutingPreview(BenchmarkCatalog catalog, ObjectProvider<BenchmarkRepository> repository,
@@ -40,19 +41,21 @@ public class RoutingPreview {
             @Value("${modelhub.routing.preview.cutoff:}") String cutoff,
             @Value("${modelhub.routing.preview.verify-cloud:false}") boolean verifyCloud,
             @Value("${modelhub.routing.generation.allow-cloud:false}") boolean allowCloudDispatch,
-            @Value("${modelhub.openrouter.endpoint}") String cloudEndpoint, ObjectMapper mapper, ObjectiveScorer scorer) {
+            @Value("${modelhub.openrouter.endpoint}") String cloudEndpoint, ObjectMapper mapper, ObjectiveScorer scorer,
+            BenchmarkDeployment deployment) {
         this(catalog, repository.getIfAvailable(), registry, localTimeout, cloudTimeout, ids, cutoff,
-                verifyCloud, allowCloudDispatch, new OpenRouterPricing(mapper, cloudEndpoint), scorer);
+                verifyCloud, allowCloudDispatch, new OpenRouterPricing(mapper, cloudEndpoint), scorer, deployment);
     }
 
     RoutingPreview(BenchmarkCatalog catalog, BenchmarkRepository repository, ModelRegistry registry,
             String localTimeout, String cloudTimeout, String ids, String cutoff, boolean verifyCloud,
-            boolean allowCloudDispatch, OpenRouterPricing pricing, ObjectiveScorer scorer) {
+            boolean allowCloudDispatch, OpenRouterPricing pricing, ObjectiveScorer scorer, BenchmarkDeployment deployment) {
         this.catalog = catalog;
         this.verifyCloud = verifyCloud;
         this.allowCloudDispatch = allowCloudDispatch;
         this.pricing = pricing;
         this.policy = new RoutingPolicy(scorer);
+        this.deployment = deployment;
         this.repository = repository;
         this.cutoff = cutoff.isBlank() ? null : Instant.parse(cutoff.strip());
         var unique = new TreeSet<UUID>();
@@ -86,8 +89,10 @@ public class RoutingPreview {
                 for (UUID id : reportIds) {
                     try {
                         repository.find(id).ifPresentOrElse(report -> {
-                            if (id.equals(report.id())) reports.add(report);
-                            else excluded.add(new Exclusion(id, "INVALID_REPORT_ID"));
+                            String reason = id.equals(report.id()) ? deployment.exclusionReason(report.deploymentId())
+                                    : "INVALID_REPORT_ID";
+                            if (reason == null) reports.add(report);
+                            else excluded.add(new Exclusion(id, reason));
                         }, () -> excluded.add(new Exclusion(id, "REPORT_NOT_FOUND")));
                     } catch (DataAccessException | JacksonException e) {
                         reports.clear();
