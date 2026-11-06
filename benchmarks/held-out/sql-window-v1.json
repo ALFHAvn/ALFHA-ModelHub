@@ -1,0 +1,18 @@
+{
+  "id": "top-two-sales-per-team",
+  "version": "1",
+  "family": "sql-window-tiebreaker",
+  "prompt": "Write one PostgreSQL SELECT query against sales(team text, sale_id integer, amount integer). Each sale_id is unique. Return up to two sales per team, highest amount first, breaking equal amounts by lower sale_id. Return columns team, sale_id, amount in that order and sort the final rows by team ascending, amount descending, and sale_id ascending. Return only SQL. A trailing semicolon is optional.",
+  "cases": [
+    {
+      "id": "ties-and-sparse-team",
+      "rows": "('a',30,90),('a',20,90),('a',10,90),('a',40,80),('b',50,60),('c',70,10),('c',60,20)",
+      "expected": "[{\"team\":\"a\",\"sale_id\":10,\"amount\":90},{\"team\":\"a\",\"sale_id\":20,\"amount\":90},{\"team\":\"b\",\"sale_id\":50,\"amount\":60},{\"team\":\"c\",\"sale_id\":60,\"amount\":20},{\"team\":\"c\",\"sale_id\":70,\"amount\":10}]"
+    },
+    {
+      "id": "tie-at-cutoff",
+      "rows": "('b',9,40),('a',5,60),('a',4,70),('a',2,60),('b',8,40),('b',7,50),('b',6,40)",
+      "expected": "[{\"team\":\"a\",\"sale_id\":4,\"amount\":70},{\"team\":\"a\",\"sale_id\":2,\"amount\":60},{\"team\":\"b\",\"sale_id\":7,\"amount\":50},{\"team\":\"b\",\"sale_id\":6,\"amount\":40}]"
+    }
+  ]
+}

@@ -175,5 +175,22 @@ This pilot exercises integration across Java files with a single submitted
 file. It produces an offline report and assumes cooperative submissions.
 [Configuration propagation fixture](../benchmarks/held-out/config-propagation-v1.json)
 
-The SQL and concurrent API families are reserved for future tasks. Freeze
-family assignments and graders before collecting held-out results.
+The SQL pilot grades a PostgreSQL query that returns the top two sales per
+team with a deterministic tie-breaker. The two fixtures cover ties at the
+cutoff and groups with fewer than two sales. The grader compares ordered
+rows and column names. A query may use any equivalent SQL formulation.
+
+```powershell
+./scripts/run-sql-window-pilot.ps1 -SourcePath ./answer.sql
+./scripts/test-sql-window-pilot.ps1
+```
+
+The grader uses a locally available `postgres:17-alpine` image and creates
+a disposable container for each fixture. It runs PostgreSQL without network
+access and evaluates the query as a restricted role in a read-only session.
+The container caps resources and output. Both cases must pass. Share only
+the prompt with candidates during collection.
+[SQL fixture](../benchmarks/held-out/sql-window-v1.json)
+
+The concurrent API family remains reserved for a future task. Freeze family
+assignments and graders before collecting held-out results.
