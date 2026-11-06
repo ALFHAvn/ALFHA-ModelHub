@@ -1,11 +1,42 @@
 package vn.alfha.modelhub.service;
 
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 import vn.alfha.modelhub.dto.BenchmarkDataset;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BenchmarkCatalogTest {
+    @Test void publishedFamilyInventoryMatchesCatalogSnapshots() throws Exception {
+        var mapper = new ObjectMapper();
+        var catalog = new BenchmarkCatalog(mapper);
+        var inventory = mapper.readTree(Path.of("benchmarks/scenario-families.json").toFile());
+        var snapshots = new HashSet<String>();
+        var familiesByTask = new HashMap<String, String>();
+        for (var entry : inventory) {
+            String id = entry.path("id").asString();
+            String version = entry.path("version").asString();
+            assertTrue(snapshots.add(id + ":" + version));
+            assertEquals(catalog.hash(id, version), entry.path("sha256").asString());
+            var families = entry.path("families");
+            var taskIds = catalog.dataset(id, version).tasks().stream().map(BenchmarkDataset.Task::id)
+                    .collect(Collectors.toSet());
+            assertEquals(taskIds, families.properties().stream().map(java.util.Map.Entry::getKey)
+                    .collect(Collectors.toSet()));
+            for (String task : taskIds) {
+                String family = families.path(task).asString();
+                assertTrue(family.matches("[a-z0-9][a-z0-9-]*"), task);
+                assertEquals(family, familiesByTask.computeIfAbsent(id + ":" + task, ignored -> family));
+            }
+        }
+        assertEquals(Set.of("basics:1", "basics:2", "software-engineering:1", "software-engineering:2",
+                "java-coding:1"), snapshots);
+    }
+
     @Test void preservesV1IdentityAndChangesOnlyTheAmbiguousPromptInV2() throws Exception {
         var catalog = new BenchmarkCatalog(new ObjectMapper());
         assertEquals("6de7890d47a885fc17f703d0b1a07970395f66640906a783ffd2498de467917e", catalog.hash());

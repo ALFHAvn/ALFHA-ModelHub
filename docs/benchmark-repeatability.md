@@ -118,3 +118,27 @@ The manifest records operator assertions. Review assignments and source
 provenance for misclassified scenarios, rewritten identities, and correlated
 runs. The checker matches the recorded dataset hash and does not authenticate
 it. Sample size, model reliability, and scorer checks belong to cohort review.
+
+## Scenario family inventory
+
+The [family map](../benchmarks/scenario-families.json) covers all five
+published dataset versions. Its array entries can be copied into a
+campaign manifest's `datasets` field. The hashes come from the benchmark
+catalog's parsed snapshots. Repeated tasks keep their family across versions.
+Related tasks can also share a family across suites. For example, the basics
+null-field task and the engineering incident task both require an explicit
+JSON null.
+
+Treat the published families as development inventory. Reserve these new
+families for held-out evaluation and assign separate families when designing
+any development counterparts.
+
+| Reserved family | Proposed skill and scoring |
+| --- | --- |
+| `test-regression-fixture` | Write a regression test that fails against a seeded bug and passes against the reference implementation. |
+| `multi-file-config-propagation` | Repair a configuration value lost across module boundaries. Run trusted integration tests against the submitted patch in isolation. |
+| `sql-window-tiebreaker` | Author a window query and compare result rows across fixtures containing ties and sparse groups. |
+| `api-concurrent-capacity` | Implement or diagnose a capacity invariant under concurrent reservations. Grade the resulting state and response contract with a controlled schedule. |
+
+These are reservations for future task authoring. Freeze the family assignments
+and graders before collecting held-out results.

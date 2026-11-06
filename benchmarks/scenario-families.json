@@ -1,0 +1,88 @@
+[
+  {
+    "id": "basics",
+    "version": "1",
+    "sha256": "6de7890d47a885fc17f703d0b1a07970395f66640906a783ffd2498de467917e",
+    "families": {
+      "arithmetic": "integer-addition",
+      "capital": "capital-recall",
+      "boolean": "primality-classification",
+      "sorting": "integer-sorting",
+      "json-object": "json-object-syntax",
+      "json-nested": "json-nested-field",
+      "typed-fields": "json-string-and-integer",
+      "boolean-field": "json-boolean-and-integer",
+      "array-field": "json-integer-array",
+      "null-field": "json-explicit-null"
+    }
+  },
+  {
+    "id": "basics",
+    "version": "2",
+    "sha256": "25e3bdbecce5b8e41b3e8acf4f896de3226940ac7bb981def7801a622bafe2c1",
+    "families": {
+      "arithmetic": "integer-addition",
+      "capital": "capital-recall",
+      "boolean": "primality-classification",
+      "sorting": "integer-sorting",
+      "json-object": "json-object-syntax",
+      "json-nested": "json-nested-field",
+      "typed-fields": "json-string-and-integer",
+      "boolean-field": "json-boolean-and-integer",
+      "array-field": "json-integer-array",
+      "null-field": "json-explicit-null"
+    }
+  },
+  {
+    "id": "software-engineering",
+    "version": "1",
+    "sha256": "15b11bb2bd0b394dd9b3a3ac3ed18176da14bf6c120c85ae92ca930ca9a027de",
+    "families": {
+      "java-virtual-dispatch": "java-method-selection",
+      "sql-null-aggregation": "sql-null-semantics",
+      "debug-loop-boundary": "java-array-loop-bounds",
+      "reasoning-list-alias": "java-list-aliasing",
+      "api-idempotency-contract": "api-idempotency-replay",
+      "structured-incident-output": "json-explicit-null"
+    }
+  },
+  {
+    "id": "software-engineering",
+    "version": "2",
+    "sha256": "f3c59db163defbd14a7f71d67ab2f603d327b964c9b93757d41abc5251b1dc89",
+    "families": {
+      "java-virtual-dispatch": "java-method-selection",
+      "sql-null-aggregation": "sql-null-semantics",
+      "debug-loop-boundary": "java-array-loop-bounds",
+      "reasoning-list-alias": "java-list-aliasing",
+      "api-idempotency-contract": "api-idempotency-replay",
+      "structured-incident-output": "json-explicit-null",
+      "java-overload": "java-method-selection",
+      "java-finally": "java-finally-return",
+      "java-integer-division": "java-signed-division",
+      "sql-left-join": "sql-outer-join-filter",
+      "sql-group-filter": "sql-group-filter",
+      "sql-update-snapshot": "sql-update-snapshot",
+      "debug-null-guard": "java-short-circuit",
+      "debug-binary-search-progress": "binary-search-progress",
+      "debug-sql-null-predicate": "sql-null-semantics",
+      "reasoning-short-circuit": "java-short-circuit",
+      "reasoning-lru-trace": "cache-lru-eviction",
+      "reasoning-transaction-trace": "transaction-savepoint",
+      "api-version-precondition": "api-revision-precondition",
+      "api-cursor-tiebreaker": "api-composite-cursor",
+      "api-validation-order": "api-validation-order",
+      "structured-log-counts": "log-record-aggregation",
+      "structured-config-merge": "config-presence-override",
+      "structured-job-state": "job-state-projection"
+    }
+  },
+  {
+    "id": "java-coding",
+    "version": "1",
+    "sha256": "29292ff23fd61472024393baeb11f724dc7344e0498c6f621ccab910195d15d5",
+    "families": {
+      "median-of-three": "integer-order-statistics"
+    }
+  }
+]
