@@ -159,6 +159,21 @@ access. The fixture and harness share the candidate's process, so the result
 assumes cooperative submissions. This pilot measures one seeded bug and
 currently produces a local grader report outside the benchmark API.
 
-The remaining families are reserved for future tasks. Freeze family
-assignments and graders before collecting held-out results.
 [Regression fixture](../benchmarks/held-out/regression-test-v1.json)
+
+The configuration propagation pilot asks for a replacement Java composition
+root that connects the supplied configuration parser and retry client. The
+trusted harness checks the resulting client behavior for the default, zero,
+and a positive override. It also checks that invalid values reach the
+caller as exceptions. All five cases must pass.
+
+```powershell
+./scripts/run-java-coding-pilot.ps1 -ConfigPropagation -SourcePath ./Main.java
+```
+
+This pilot exercises integration across Java files with a single submitted
+file. It produces an offline report and assumes cooperative submissions.
+[Configuration propagation fixture](../benchmarks/held-out/config-propagation-v1.json)
+
+The SQL and concurrent API families are reserved for future tasks. Freeze
+family assignments and graders before collecting held-out results.

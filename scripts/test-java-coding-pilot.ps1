@@ -36,6 +36,22 @@ public class Main {
     Write-Output "Verified regression outcomes $reference, $mutant."
 }
 
+function Assert-ConfigPropagation([string]$body, [string[]]$expected) {
+    Set-Content -LiteralPath $sourcePath -Encoding utf8NoBOM -Value @"
+public class Main {
+    public static RetryClient create(java.util.Map<String, String> settings) {
+        $body
+    }
+}
+"@
+    $report = & $runner -SourcePath $sourcePath -ConfigPropagation | ConvertFrom-Json
+    $outcomes = $report.results.outcome -join ','
+    if ($report.taskId -cne 'retry-limit-propagation' -or $outcomes -cne ($expected -join ',')) {
+        throw "Unexpected configuration propagation outcomes: $outcomes"
+    }
+    Write-Output "Verified configuration propagation outcomes $outcomes."
+}
+
 try {
     Assert-Outcome @'
 if (java.nio.file.Files.exists(java.nio.file.Path.of("/var/run/docker.sock"))
@@ -76,6 +92,16 @@ System.out.println(values[1]);
     Assert-Regression 'if (Shipping.fee(4999) != 499) throw new AssertionError();' 'PASS' 'WRONG_ANSWER'
     Assert-Regression 'throw new AssertionError();' 'WRONG_ANSWER' 'PASS'
     Assert-Regression 'throw new IllegalStateException();' 'EXECUTION_ERROR' 'EXECUTION_ERROR'
+    Assert-ConfigPropagation 'return new RetryClient(RetryConfig.from(settings).retryLimit());' @('PASS', 'PASS', 'PASS', 'PASS', 'PASS')
+    Assert-ConfigPropagation 'return new RetryClient(2);' @('PASS', 'WRONG_ANSWER', 'WRONG_ANSWER', 'WRONG_ANSWER', 'WRONG_ANSWER')
+    $clampAndDefault = @'
+try {
+    return new RetryClient(Math.max(1, RetryConfig.from(settings).retryLimit()));
+} catch (IllegalArgumentException invalid) {
+    return new RetryClient(2);
+}
+'@
+    Assert-ConfigPropagation $clampAndDefault @('PASS', 'WRONG_ANSWER', 'PASS', 'WRONG_ANSWER', 'WRONG_ANSWER')
 } finally {
     if (Test-Path -LiteralPath $sourcePath) { Remove-Item -LiteralPath $sourcePath }
     Remove-Item -LiteralPath $directory

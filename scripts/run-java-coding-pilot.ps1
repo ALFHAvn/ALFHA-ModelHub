@@ -3,19 +3,23 @@ param(
     [Parameter(Mandatory)][string]$SourcePath,
     [ValidateRange(1, 30)][int]$TimeoutSeconds = 8,
     [ValidatePattern('^[a-f0-9]{32}$')][string]$RunId = [guid]::NewGuid().ToString('N'),
-    [switch]$RegressionTest
+    [switch]$RegressionTest,
+    [switch]$ConfigPropagation
 )
 
 $ErrorActionPreference = 'Stop'
+if ($RegressionTest -and $ConfigPropagation) { throw 'Choose one held-out task.' }
 $imageTag = 'eclipse-temurin:21-jdk-alpine'
 $taskPath = if ($RegressionTest) {
     Join-Path $PSScriptRoot '../benchmarks/held-out/regression-test-v1.json'
+} elseif ($ConfigPropagation) {
+    Join-Path $PSScriptRoot '../benchmarks/held-out/config-propagation-v1.json'
 } else {
     Join-Path $PSScriptRoot '../src/main/resources/benchmarks/java-coding-v1.json'
 }
 $taskJson = (Get-Content -LiteralPath $taskPath -Raw).Replace("`r`n", "`n")
 $dataset = $taskJson | ConvertFrom-Json
-$task = if ($RegressionTest) { $dataset } else { $dataset.tasks[0] }
+$task = if ($RegressionTest -or $ConfigPropagation) { $dataset } else { $dataset.tasks[0] }
 $sourceFile = Get-Item -LiteralPath $SourcePath
 if ($sourceFile -isnot [System.IO.FileInfo] -or $sourceFile.Length -gt 16384) {
     throw 'Supply a Java source file of at most 16 KiB.'
@@ -46,10 +50,16 @@ final class Harness {
     }
 }
 '@
-        $caseArgs = @($case.fixture, $harness) | ForEach-Object {
+    } elseif ($ConfigPropagation) {
+        $harness = $task.harness
+    }
+    if ($RegressionTest -or $ConfigPropagation) {
+        $fixture = if ($RegressionTest) { $case.fixture } else { $task.fixture }
+        $trustedArgs = @($fixture, $harness) | ForEach-Object {
             [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($_))
         }
-        $command = 'cat > /tmp/Main.java && printf %s "$1" | base64 -d > /tmp/Shipping.java && printf %s "$2" | base64 -d > /tmp/Harness.java || exit 67; javac -J-Xmx96m -J-XX:ActiveProcessorCount=1 -J-XX:-UsePerfData -proc:none -d /tmp /tmp/Main.java /tmp/Shipping.java /tmp/Harness.java || exit 65; java -Xmx96m -XX:ActiveProcessorCount=1 -XX:-UsePerfData -cp /tmp Harness || exit 66'
+        $caseArgs = @($trustedArgs) + @($case.args | Where-Object { $null -ne $_ })
+        $command = 'cat > /tmp/Main.java && printf %s "$1" | base64 -d > /tmp/Fixture.java && printf %s "$2" | base64 -d > /tmp/Harness.java || exit 67; shift 2; javac -J-Xmx96m -J-XX:ActiveProcessorCount=1 -J-XX:-UsePerfData -proc:none -d /tmp /tmp/Main.java /tmp/Fixture.java /tmp/Harness.java || exit 65; java -Xmx96m -XX:ActiveProcessorCount=1 -XX:-UsePerfData -cp /tmp Harness "$@" || exit 66'
     }
     $container = & $docker create --name "modelhub-coding-$RunId-$($case.id)" --pull never --interactive --network none --read-only --user '65534:65534' `
         --cap-drop ALL --security-opt no-new-privileges --cpus 1 --memory 256m --memory-swap 256m `

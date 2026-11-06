@@ -1,0 +1,15 @@
+{
+  "id": "retry-limit-propagation",
+  "version": "1",
+  "family": "multi-file-config-propagation",
+  "prompt": "Repair a Java 21 composition root. The current Main.create(java.util.Map<String,String> settings) always returns new RetryClient(2). Write a replacement public class Main, without a package, with public static RetryClient create(java.util.Map<String,String> settings). Use the supplied RetryConfig.from(settings).retryLimit() to configure RetryClient. RetryConfig uses 2 when retry.limit is absent and accepts explicit integers from 0 to 5. An invalid value must propagate IllegalArgumentException. RetryClient takes the number of retries after the initial attempt. Submit Main.java only.",
+  "fixture": "record RetryConfig(int retryLimit) {\n    static RetryConfig from(java.util.Map<String,String> settings) {\n        int limit = Integer.parseInt(settings.getOrDefault(\"retry.limit\", \"2\"));\n        if (limit < 0 || limit > 5) throw new IllegalArgumentException(\"retry.limit out of range\");\n        return new RetryConfig(limit);\n    }\n}\nfinal class RetryClient {\n    private final int limit;\n    RetryClient(int limit) { this.limit = limit; }\n    int attemptsUntilSuccess(int firstSuccess) { return Math.min(firstSuccess, limit + 1); }\n}",
+  "harness": "final class Harness {\n    public static void main(String[] args) {\n        var settings = args.length == 0 ? java.util.Map.<String,String>of() : java.util.Map.of(\"retry.limit\", args[0]);\n        RetryClient client;\n        try {\n            client = Main.create(settings);\n        } catch (IllegalArgumentException invalid) {\n            System.out.println(\"invalid\");\n            return;\n        }\n        System.out.println(client.attemptsUntilSuccess(10) + \",\" + client.attemptsUntilSuccess(1));\n    }\n}",
+  "cases": [
+    {"id": "default", "args": [], "expected": "3,1"},
+    {"id": "disabled", "args": ["0"], "expected": "1,1"},
+    {"id": "override", "args": ["4"], "expected": "5,1"},
+    {"id": "invalid", "args": ["6"], "expected": "invalid"},
+    {"id": "malformed", "args": ["many"], "expected": "invalid"}
+  ]
+}
