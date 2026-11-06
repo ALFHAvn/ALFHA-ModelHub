@@ -1,23 +1,26 @@
 # ALFHA ModelHub
 
-Java backend for a future multi-model AI orchestration and evaluation platform.
-This repository is independent of ALFHA Agent.
+ALFHA ModelHub is a local platform for running, comparing, and evaluating AI
+models. It is independent of ALFHA Agent.
 
-## Current scope: Milestone 7
+## Current scope
 
-Implemented: Spring Boot application, JSON health endpoint, Java 21 Maven build,
-Ollama and optional OpenRouter providers, model listing, generation, concurrent comparison,
-PostgreSQL execution history with Flyway migrations, and automated tests.
-Docker Compose and GitHub Actions are included. Real Ollama/OpenRouter generation,
-comparison, and saved history have been verified; see `docs/validation.md` for evidence.
-Milestone 7 adds a ten-task objective benchmark, saved reports, and per-model
-summaries. See [benchmark usage and scoring](docs/benchmarks.md).
-Dataset v2 clarifies the literal-string task while preserving v1. Use
-`datasetVersion: "2"` to select it; existing requests continue to use v1.
-Three [real local v2 repetitions](benchmarks/baselines/2026-11-05-qwen3-4b-v2/README.md)
-passed all ten tasks in each run; this describes these tasks, not general model accuracy.
-The [first fixed free cloud comparison](benchmarks/comparisons/2026-11-05-qwen3-vs-lfm25-v2/README.md)
-records paired local/cloud results, including rate limits and one JSON-format failure.
+- A Java 21 Spring Boot backend connects to Ollama and optional OpenRouter,
+  runs generation and comparisons, and saves execution history in PostgreSQL.
+- The React web UI supports chat, comparison, and execution history.
+  [Windows startup guide](#local-web-ui-on-windows-11)
+- Versioned benchmarks cover 10 basic tasks, 24 software engineering tasks,
+  and an opt-in Java coding pilot that runs submissions in restricted Docker
+  containers. Reports include task results, provider failures, and latency.
+  [Benchmark usage and scoring](docs/benchmarks.md)
+- Opt-in routing previews and routed generation use curated benchmark reports.
+  Cloud dispatch requires a fresh pricing check and sends zero-price limits.
+  [Routing design](docs/routing-design.md)
+- Milestone 10 covers benchmark coverage and repeatability.
+  [Evaluation protocol](docs/benchmark-repeatability.md)
+
+Docker Compose and GitHub Actions are included. The validation notes describe
+which behaviors have been exercised with live providers. [Validation](docs/validation.md)
 
 ## Prerequisites
 
