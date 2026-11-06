@@ -2,6 +2,7 @@ FROM maven:3.9.12-eclipse-temurin-21 AS build
 WORKDIR /workspace
 COPY pom.xml .
 COPY src ./src
+COPY benchmarks/scenario-families.json ./benchmarks/scenario-families.json
 # Unit/HTTP tests run here. Docker-dependent integration tests run in CI/verify.
 RUN mvn --batch-mode --no-transfer-progress package
 

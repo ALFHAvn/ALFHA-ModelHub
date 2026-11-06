@@ -2,4 +2,7 @@
 !pom.xml
 !src/
 !src/**
+!benchmarks/
+benchmarks/*
+!benchmarks/scenario-families.json
 !Dockerfile
