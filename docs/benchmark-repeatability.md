@@ -208,3 +208,33 @@ submissions. Share only the prompt during collection.
 [Concurrent capacity fixture](../benchmarks/held-out/concurrent-capacity-v1.json)
 
 Freeze family assignments and graders before collecting held-out results.
+
+## Export held-out execution evidence
+
+Record the request start time and save the matching execution object from
+the history API. Send the task prompt verbatim. For a successful execution,
+save the response exactly as UTF-8 without a BOM or an added newline, then
+run the task's offline grader and save its JSON result.
+
+```powershell
+./scripts/export-held-out-evidence.ps1 -TaskPath ./benchmarks/held-out/sql-window-v1.json -ExecutionPath ./execution.json -StartedAt $requestStartedAt -GradePath ./grade.json |
+    Set-Content -Encoding utf8NoBOM ./evaluation-report.json
+```
+
+For a failed execution, omit `-GradePath` and export the failure as an
+unscored result. The export checks the prompt, grader case list, task hash,
+and response hash. It keeps the original request ID, uses the history
+timestamp as the end of the observed interval, and carries the grader
+verdict without copying the model response into the campaign report.
+
+Add a campaign dataset entry using the exported dataset's ID, version, and
+`datasetSha256`, with the task ID mapped to its fixture family. Supply the
+exports to the campaign checker as evaluation reports. One export covers
+one model execution. Plan model pairings, check cohort thresholds, and
+record model settings separately. The checker verifies split provenance
+rules, while the export relies on an operator-recorded start time and
+locally generated grader results.
+
+For the v0.2.0 review, distinguish fixture verification from a held-out
+model campaign. A release candidate still needs collected evidence under
+the frozen protocol and a review of release notes and version metadata.
