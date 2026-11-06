@@ -9,3 +9,7 @@
 !.env.example
 *.log
 /benchmark-report.json
+/web/node_modules/
+/web/dist/
+/.npm-cache/
+/web/.npm-cache/

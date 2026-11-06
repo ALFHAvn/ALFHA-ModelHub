@@ -329,6 +329,58 @@ successful and failed execution storage, partial comparison persistence, paginat
 request-ID correlation, restart durability, and simulated write failure. AI responses
 remain stubbed; real cloud calls are not part of this test.
 
+## Local Web UI on Windows 11
+
+Use PowerShell, Docker Desktop in Linux-container mode, Ollama for Windows,
+and Node.js 22.12 or newer with npm. Run the following from the repository
+root. Check that Ollama is running and choose a model from `ollama list`.
+If Ollama is stopped, run `ollama serve` in a separate PowerShell window.
+
+```powershell
+ollama list
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+notepad .env
+```
+
+In `.env`, set a unique `DATABASE_PASSWORD` for a new database, or use the
+existing password for an initialized Compose volume. Set `OLLAMA_MODEL`
+to the exact installed model ID and keep `APP_PORT=8080` for the UI proxy.
+For local-only inference set `OPENROUTER_ENABLED=false`. Save the file and run:
+
+```powershell
+docker compose up -d --build --wait
+Invoke-RestMethod http://127.0.0.1:8080/api/health
+Set-Location web
+npm ci
+npm run dev
+```
+
+Open [ModelHub](http://127.0.0.1:5173/) in your browser. Choose a model in
+**Chat**, enter a prompt, and select **Send prompt**. Responses show execution
+status and backend-measured latency. Open **History** to browse saved
+executions. **Compare** requires two distinct configured models. If you
+enable OpenRouter for the second model, keep its key in the root `.env`
+and restart the backend with `docker compose up -d --wait` from the
+repository root. Selecting that model sends your prompt to OpenRouter.
+
+The UI listens on `127.0.0.1:5173` and proxies the chat, compare, history,
+model, and health API requests to the backend at `127.0.0.1:8080`. Keep
+both services on loopback. When using a host backend instead of Compose,
+start it with `SERVER_ADDRESS=127.0.0.1` and `SERVER_PORT=8080`.
+
+If the UI says **Backend offline**, check `docker compose ps` and refresh
+the connection in the UI. If the backend is online but Ollama is unreachable,
+check the configured `OLLAMA_BASE_URL` from Docker as described below.
+Stop Vite with Ctrl+C and run `docker compose stop` from the repository root
+when finished. The database volume retains your history.
+
+To verify the frontend from the `web` directory:
+
+```powershell
+npm test
+npm run build
+```
+
 ## Docker Compose quick start
 
 Docker Desktop must be running Linux containers. You do not need a host JDK,
