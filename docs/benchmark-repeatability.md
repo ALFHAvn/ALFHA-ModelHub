@@ -246,3 +246,39 @@ its request ID. The response included prose and a Markdown fence around its
 query. Both PostgreSQL cases returned `QUERY_ERROR` when graded on the exact
 response, and the export recorded `FAIL`. This exploratory run exercised
 the live collection path and falls outside the frozen evaluation campaign.
+
+## First local held-out campaign
+
+Compare the installed Qwen2.5 Coder 3B and 7B Q4_K_M models on all four
+held-out tasks. Use the 3B model as the fixed baseline. Plan three paired
+repetitions across two nonoverlapping windows, with two repetitions in the
+first window and one in the second. Each repetition contains one response per
+task from each model, for 24 model calls total. Run calls serially, alternate
+which model goes first in consecutive pairs, and keep task order fixed.
+
+Before collection, freeze the repository commit, task and grader hashes,
+model digests, runtime and grader image IDs, timeout settings, and window
+boundaries. Record the configured sampling settings or provider defaults.
+Grade the saved response byte for byte. Preserve failed calls and score
+format violations under the task's original contract. Record first-call
+latency separately from any warm-up, and retain the planned slot when a
+tooling error prevents grading.
+
+With a loopback ModelHub instance configured for the requested Ollama model,
+collect one slot at a time:
+
+```powershell
+./scripts/collect-held-out-run.ps1 -Task sql-window -Model qwen2.5-coder:3b-instruct-q4_K_M
+```
+
+The collector makes one generation request and verifies it against the most
+recent 100 history entries. It saves artifacts in a new directory under
+`target`. If grading fails to produce an export, the directory retains the
+saved execution and start timestamp for manual recovery. Use a dedicated
+instance or avoid concurrent requests during collection.
+
+Record pass, fail, and unscored counts per model and per task, along with
+paired outcome differences and successful generation latency. The campaign
+compares explicit local models. Its findings apply to those four tasks and
+cannot validate the separate local-versus-cloud routing policy. The earlier
+SQL smoke test is excluded from the planned 24 calls.
