@@ -296,3 +296,17 @@ document which data preceded this evaluation. Keep their metrics in separate
 cohorts. Start the first task pair with the 3B model and alternate the first
 model for each subsequent task pair. Within the same model and task, retain
 each original request ID and its repetition assignment.
+
+Summarize the journal for a finished window while the next window is pending.
+After both windows finish, omit `-WindowId` to require both journals.
+
+```powershell
+./scripts/summarize-held-out-campaign.ps1 -WindowId evaluation-1
+./scripts/summarize-held-out-campaign.ps1
+```
+
+The summary checks the planned slot order, window bounds, unique request IDs,
+task hashes, and grader image IDs. It reports per-model and per-task scores,
+paired outcomes, failure counts, and median latency for successful provider
+calls. Run the split checker with the development reports and collected
+evaluation reports before the release review.
