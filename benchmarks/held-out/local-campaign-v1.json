@@ -1,0 +1,67 @@
+{
+  "id": "local-held-out-v1",
+  "policyFrozenAt": "2026-11-07T14:35:00+07:00",
+  "sourceCommit": "81ee6d5ac44c877a47016dfc842c96c9ba5f1688",
+  "purpose": "Compare explicit local models on four held-out tasks.",
+  "windows": [
+    {"id": "historical-local-baseline", "split": "development", "startedAt": "2026-11-05T02:55:00+07:00", "completedAt": "2026-11-05T03:08:00+07:00"},
+    {"id": "historical-paired-basics", "split": "development", "startedAt": "2026-11-05T03:12:00+07:00", "completedAt": "2026-11-05T03:23:00+07:00"},
+    {"id": "evaluation-1", "split": "evaluation", "startedAt": "2026-11-07T15:00:00+07:00", "completedAt": "2026-11-07T17:00:00+07:00", "repetitions": [1, 2]},
+    {"id": "evaluation-2", "split": "evaluation", "startedAt": "2026-11-08T14:00:00+07:00", "completedAt": "2026-11-08T16:00:00+07:00", "repetitions": [3]}
+  ],
+  "models": [
+    {"role": "baseline", "id": "qwen2.5-coder:3b-instruct-q4_K_M", "digest": "f72c60cabf6237b07f6e632b2c48d533cef25eda2efbd34bed21c5e9c01e6225"},
+    {"role": "challenger", "id": "qwen2.5-coder:7b-instruct-q4_K_M", "digest": "dae161e27b0e90dd1856c8bb3209201fd6736d8eb66298e75ed87571486f4364"}
+  ],
+  "runtime": {
+    "ollamaVersion": "0.40.15",
+    "dockerVersion": "29.9.1",
+    "powerShellVersion": "7.6.9",
+    "modelHubImage": "sha256:20d791719f13cf5eeed1de74990221c9e6e17f0a6310421c6e504616e85ee117",
+    "javaGraderImage": "sha256:b78a1d385da875588e21207f07dddf9a1418849971ae857fb24c8f3a7d441a72",
+    "postgresImage": "sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b",
+    "ollamaTimeoutSeconds": 120,
+    "collectorTimeoutSeconds": 180,
+    "javaCaseTimeoutSeconds": 8,
+    "sqlStatementTimeoutMs": 2000,
+    "sqlContainerTimeoutSeconds": 25,
+    "sampling": "Ollama model defaults via non-streaming generation",
+    "retries": 0
+  },
+  "taskOrder": ["regression-test", "config-propagation", "sql-window", "concurrent-capacity"],
+  "scoringVersion": "held-out-offline-v1",
+  "scriptSha256": {
+    "scripts/run-java-coding-pilot.ps1": "0b48402126c4d34d2b30882a12c9b71123fc2dbc30e4bf253b9d6e1063db03c8",
+    "scripts/run-sql-window-pilot.ps1": "3c477dce5c87b3c9812f01affb3b81b647347780108859959ca5d61620c87904",
+    "scripts/collect-held-out-run.ps1": "daf5ff50b81b40361dee9b1a95dfccc8a4d3bd1ab3d2db1094046ca5afa7cbae",
+    "scripts/export-held-out-evidence.ps1": "2b448e42fcc1f91e7dc028b8359ec5b4aa091d27ded2dc341ed11cae755ee4a0",
+    "scripts/check-benchmark-splits.ps1": "e1e1f30ac775e610c8565a8048e0e0e552ce2c4baf705d04afa256b3b4abc440"
+  },
+  "datasets": [
+    {
+      "id": "basics", "version": "2", "sha256": "25e3bdbecce5b8e41b3e8acf4f896de3226940ac7bb981def7801a622bafe2c1",
+      "families": {
+        "arithmetic": "integer-addition", "capital": "capital-recall", "boolean": "primality-classification",
+        "sorting": "integer-sorting", "json-object": "json-object-syntax", "json-nested": "json-nested-field",
+        "typed-fields": "json-string-and-integer", "boolean-field": "json-boolean-and-integer",
+        "array-field": "json-integer-array", "null-field": "json-explicit-null"
+      }
+    },
+    {
+      "id": "shipping-threshold-regression", "version": "1", "sha256": "d08ccb5c96793246f36f7dc5cf5e3885d36d2439426b54bddbba7c566d65c601",
+      "families": {"shipping-threshold-regression": "test-regression-fixture"}
+    },
+    {
+      "id": "retry-limit-propagation", "version": "1", "sha256": "89d2b21083db7a2a84cfc997b55ea2691b6815b0b48f23caa6e952629fa5e24b",
+      "families": {"retry-limit-propagation": "multi-file-config-propagation"}
+    },
+    {
+      "id": "top-two-sales-per-team", "version": "1", "sha256": "2053b7bdbb19cb0ac6bc0b82ad459cb5181906736d1f91df8ccccc0dcf3db7f5",
+      "families": {"top-two-sales-per-team": "sql-window-tiebreaker"}
+    },
+    {
+      "id": "concurrent-capacity-reservation", "version": "1", "sha256": "f579108ab16e05b23c46ad9dd623a58456f1517e014e6c69f61906abca1876ea",
+      "families": {"concurrent-capacity-reservation": "api-concurrent-capacity"}
+    }
+  ]
+}

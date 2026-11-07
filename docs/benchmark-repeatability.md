@@ -282,3 +282,17 @@ paired outcome differences and successful generation latency. The campaign
 compares explicit local models. Its findings apply to those four tasks and
 cannot validate the separate local-versus-cloud routing policy. The earlier
 SQL smoke test is excluded from the planned 24 calls.
+
+The [local campaign manifest](../benchmarks/held-out/local-campaign-v1.json)
+records the selected versions and scheduled windows. The SHA-256 values for
+scripts and held-out tasks use UTF-8 text with LF line endings. Recheck the
+installed digests and versions before collection. If a window becomes
+unavailable, revise the schedule before starting that window and retain the
+original manifest in Git.
+
+Use the saved basics v2 local baseline and paired comparison directories as
+development inputs to the split checker. Their separate historical windows
+document which data preceded this evaluation. Keep their metrics in separate
+cohorts. Start the first task pair with the 3B model and alternate the first
+model for each subsequent task pair. Within the same model and task, retain
+each original request ID and its repetition assignment.
