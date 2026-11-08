@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory)][string]$ReviewerModel,
     [ValidateRange(1, 65535)][int]$Port = 8080,
     [ValidateSet('1', '2')][string]$DatasetVersion = '1',
-    [switch]$IncludeSelfReview
+    [switch]$IncludeSelfReview,
+    [switch]$StructuredComparisonV1
 )
 
 $ErrorActionPreference = 'Stop'
@@ -64,6 +65,9 @@ function Save-SelfReview([string]$Prompt, [string]$Directory) {
 }
 
 if ($IncludeSelfReview -and $DatasetVersion -cne '2') { throw 'Same-model control requires dataset v2.' }
+if ($StructuredComparisonV1 -and ($DatasetVersion -cne '2' -or $IncludeSelfReview -or $fixture.tasks.Count -ne 6)) {
+    throw 'Structured-output comparison v1 requires six v2 fixtures without the same-model control.'
+}
 if ($ProposerModel -ceq $ReviewerModel) { throw 'Select distinct Ollama models.' }
 $models = Get-Json '/api/models'
 foreach ($model in @($ProposerModel, $ReviewerModel)) {
@@ -75,57 +79,93 @@ foreach ($model in @($ProposerModel, $ReviewerModel)) {
 $target = (New-Item -ItemType Directory -Force -Path (Join-Path $PSScriptRoot '../target')).FullName
 $lock = [IO.File]::Open((Join-Path $target 'proposal-review-pilot.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
 try {
-    $directory = (New-Item -ItemType Directory -Path (Join-Path $target "proposal-review-pilot-$([guid]::NewGuid().ToString('N'))")).FullName
+    $prefix = if ($StructuredComparisonV1) { 'proposal-review-structured-v1' } else { 'proposal-review-pilot' }
+    $directory = (New-Item -ItemType Directory -Path (Join-Path $target "$prefix-$([guid]::NewGuid().ToString('N'))")).FullName
     Write-Host "Pilot artifacts are saved in $directory"
     $executionIds = [Collections.Generic.HashSet[guid]]::new()
-    $results = @(foreach ($task in $fixture.tasks) {
-        $prompt = & $scorer -TaskId $task.id -DatasetVersion $DatasetVersion
-        $taskDirectory = (New-Item -ItemType Directory -Path (Join-Path $directory $task.id)).FullName
+    $schedule = @(for ($i = 0; $i -lt $fixture.tasks.Count; $i++) {
+        $task = $fixture.tasks[$i]
+        $arms = if (-not $StructuredComparisonV1) { 'standard' }
+        elseif ($i % 2 -eq 0) { 'standard', 'structured' } else { 'structured', 'standard' }
+        foreach ($arm in $arms) { @{ taskId = $task.id; arm = $arm } }
+    })
+    $scoreOptions = @{}
+    if ($StructuredComparisonV1) { $scoreOptions.StructuredComparisonV1 = $true }
+    $results = @(foreach ($slot in $schedule) {
+        $task = $slot.taskId
+        $prompt = & $scorer -TaskId $task -DatasetVersion $DatasetVersion
+        $slotPath = if ($StructuredComparisonV1) { "$task/$($slot.arm)" } else { $task }
+        $taskDirectory = (New-Item -ItemType Directory -Path (Join-Path $directory $slotPath)).FullName
         $request = [ordered]@{ proposerModel = $ProposerModel; reviewerModel = $ReviewerModel; prompt = $prompt; allowCloud = $false }
         $requestJson = $request | ConvertTo-Json -Compress
         $requestJson | Set-Content -LiteralPath (Join-Path $taskDirectory 'request.json') -NoNewline
         $workflowPath = Join-Path $taskDirectory 'workflow.json'
         $start = [datetimeoffset]::UtcNow
         $timer = [Diagnostics.Stopwatch]::StartNew()
-        $response = Invoke-WebRequest "$base/api/workflows/proposal-review" @http -Method Post -TimeoutSec 300 `
+        $path = if ($slot.arm -ceq 'structured') { '/api/workflows/proposal-review/defect-ids' } else { '/api/workflows/proposal-review' }
+        $response = Invoke-WebRequest "$base$path" @http -Method Post -TimeoutSec 300 `
             -ContentType 'application/json; charset=utf-8' -Body $requestJson -OutFile $workflowPath -PassThru -SkipHttpErrorCheck
         $timer.Stop()
         $end = [datetimeoffset]::UtcNow
         $timing = [ordered]@{ startedAt = $start.ToString('o'); completedAt = $end.ToString('o'); elapsedMs = $timer.ElapsedMilliseconds }
         $timing | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $taskDirectory 'timing.json')
-        if ($response.StatusCode -ne 200) { throw "Workflow HTTP $($response.StatusCode) for $($task.id)." }
+        if ($response.StatusCode -ne 200) { throw "Workflow HTTP $($response.StatusCode) for $slotPath." }
         $workflow = Get-Content -LiteralPath $workflowPath -Raw | ConvertFrom-Json -DateKind String
-        $score = & $scorer -TaskId $task.id -WorkflowPath $workflowPath -DatasetVersion $DatasetVersion | ConvertFrom-Json -DateKind String
+        $score = & $scorer -TaskId $task -WorkflowPath $workflowPath -DatasetVersion $DatasetVersion @scoreOptions | ConvertFrom-Json -DateKind String
         if ($workflow.proposal.model -cne $ProposerModel -or $workflow.review.model -cne $ReviewerModel) {
-            throw "Workflow returned different model IDs for $($task.id)."
+            throw "Workflow returned different model IDs for $slotPath."
+        }
+        if ($StructuredComparisonV1 -and 'HISTORY_UNAVAILABLE' -cin $score.proposal.errorCode, $score.review.errorCode) {
+            throw "History storage failed for $slotPath. Raw workflow was retained."
         }
 
         $page = Get-Json '/api/runs?size=100'
         $proposal = Find-SavedStep $workflow.proposal $page.content $start $end
-        if ($proposal.prompt -cne $prompt) { throw "Saved proposal prompt differs for $($task.id)." }
+        if ($proposal.prompt -cne $prompt) { throw "Saved proposal prompt differs for $slotPath." }
         $review = $null
         if ($workflow.review.status -cne 'SKIPPED') {
             $review = Find-SavedStep $workflow.review $page.content $start $end
             if ($review.prompt -isnot [string] -or -not $review.prompt.StartsWith($reviewPrefix, [StringComparison]::Ordinal) -or
                 [datetimeoffset]$review.timestamp -lt [datetimeoffset]$proposal.timestamp) {
-                throw "Saved review instructions or ordering differ for $($task.id)."
+                throw "Saved review instructions or ordering differ for $slotPath."
             }
             $input = $review.prompt.Substring($reviewPrefix.Length) | ConvertFrom-Json -AsHashtable -DateKind String
             if ($input.Count -ne 2 -or $input.task -cne $prompt -or $input.proposal -cne $proposal.response) {
-                throw "Saved review inputs differ for $($task.id)."
+                throw "Saved review inputs differ for $slotPath."
             }
         }
         @{ proposal = $proposal; review = $review } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $taskDirectory 'history.json')
         if ($IncludeSelfReview -and $null -ne $review) {
             $controlPath = Save-SelfReview $review.prompt $taskDirectory
-            $score = & $scorer -TaskId $task.id -WorkflowPath $workflowPath -DatasetVersion $DatasetVersion `
+            $score = & $scorer -TaskId $task -WorkflowPath $workflowPath -DatasetVersion $DatasetVersion `
                 -SelfReviewPath $controlPath | ConvertFrom-Json -DateKind String
         }
         $score | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $taskDirectory 'score.json')
-        [ordered]@{ taskId = $task.id; elapsedMs = $timing.elapsedMs; score = $score }
+        $record = [ordered]@{ taskId = $task; elapsedMs = $timing.elapsedMs; score = $score }
+        if ($StructuredComparisonV1) { $record.arm = $slot.arm }
+        $record
     })
     $summary = [ordered]@{ proposerModel = $ProposerModel; reviewerModel = $ReviewerModel; tasks = $results }
     if ($IncludeSelfReview) { $summary.selfReviewRequested = $true }
+    if ($StructuredComparisonV1) {
+        $summary.protocol = 'structured-output-comparison-v1'
+        $summary.metrics = @(foreach ($arm in 'standard', 'structured') {
+            $rows = @($results | Where-Object arm -CEQ $arm)
+            foreach ($role in 'proposal', 'review') {
+                $steps = @($rows | ForEach-Object { $_.score.$role })
+                $passes = @($steps | Where-Object { $_.score.outcome -ceq 'PASS' }).Count
+                $wrong = @($steps | Where-Object { $_.score.outcome -ceq 'WRONG_ANSWER' }).Count
+                [ordered]@{
+                    arm = $arm; role = $role; planned = $steps.Count
+                    attempted = @($steps | Where-Object status -CNE 'SKIPPED').Count
+                    conforming = $passes + $wrong; passes = $passes; wrongAnswers = $wrong
+                    formatErrors = @($steps | Where-Object { $_.score.outcome -ceq 'FORMAT_ERROR' }).Count
+                    skipped = @($steps | Where-Object status -CEQ 'SKIPPED').Count
+                    executionFailures = @($steps | Where-Object { $_.status -ceq 'FAILED' -and $_.score.outcome -ceq 'UNAVAILABLE' } | ForEach-Object errorCode)
+                }
+            }
+        })
+    }
     $summary | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $directory 'summary.json')
     Get-Item -LiteralPath (Join-Path $directory 'summary.json')
 } finally { $lock.Dispose() }

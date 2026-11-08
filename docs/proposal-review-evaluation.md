@@ -224,12 +224,50 @@ check uniqueness across both arms. The two review inputs can differ because
 each reviewer receives its own arm's proposal. The comparison measures the
 effect of structured output across the whole workflow.
 
-Use the same raw score categories in both arms. The historical collector and
-scorer still implement their frozen protocol. Collection and reporting for
-this paired protocol remain separate from those tools.
+Run the paired collector with PowerShell 7.5 or later against a quiet local
+ModelHub instance with PostgreSQL. Use the installed model identifiers from
+the runtime configuration. The comparison output goes into a new
+`target/proposal-review-structured-v1-*` directory.
+
+```powershell
+./scripts/collect-proposal-review-pilot.ps1 -DatasetVersion 2 -StructuredComparisonV1 `
+  -ProposerModel qwen2.5-coder:3b-instruct-q4_K_M `
+  -ReviewerModel qwen2.5-coder:7b-instruct-q4_K_M
+```
+
+The summary lists the arms in dispatch order and reports outcome counts by
+arm and role. The collector stops if an attempted step cannot be verified in
+history. Its raw response remains available for investigation. The scorer
+uses the comparison rules only with `-StructuredComparisonV1`. The default
+collector and scorer retain the historical protocol.
 
 In a two-call smoke test on a synthetic task, Qwen2.5 Coder 3B and 7B both
 returned valid JSON. They reported IDs outside the task's candidate list.
 This confirms the endpoint can enforce shape while the experiment still
 needs to measure answer correctness separately. The smoke test is outside
 the paired batch.
+
+### First paired run on 8 November 2026
+
+The batch used Qwen2.5 Coder 3B Q4_K_M as proposer and 7B Q4_K_M as reviewer
+on Ollama 0.40.15, with model defaults and backend commit `01dd206`.
+The collector verified 24 distinct executions across 12 workflows against
+PostgreSQL. Each task used an identical request body in both arms. A replay
+reproduced all 12 saved scores, and the model digests and frozen input hashes
+matched before and after collection.
+
+| Arm and step | Valid format | Exact-set passes | Conforming wrong answers | Format failures |
+| --- | ---: | ---: | ---: | ---: |
+| Standard proposal | 0/6 | 0/6 | 0 | 6 |
+| Standard review | 0/6 | 0/6 | 0 | 6 |
+| Structured proposal | 6/6 | 1/6 | 5 | 0 |
+| Structured review | 6/6 | 1/6 | 5 | 0 |
+
+All provider calls completed and no reviews were skipped. Median workflow
+time was 15.27 s for the standard arm and 15.38 s for the structured arm.
+Within the structured arm, review improved one exact-set verdict, regressed
+one, and tied four. The standard arm yielded no format-conforming responses,
+so correctness conditional on valid format cannot be compared across arms.
+The run measures one model pair and one attempt per fixture. Raw responses
+and prior benchmark results remain separate from this comparison. Collection
+made zero cloud calls and applied no extraction or normalization.

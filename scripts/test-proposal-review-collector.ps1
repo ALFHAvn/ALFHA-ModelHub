@@ -33,18 +33,35 @@ function Invoke-WebRequest($Uri, $TimeoutSec, $MaximumRedirection, [switch]$NoPr
         $step | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $OutFile
         return @{ StatusCode = if ($step.error) { 504 } else { 200 } }
     }
-    if (-not $Uri.EndsWith('/api/workflows/proposal-review') -or $Method -ne 'Post') { throw "Unexpected request: $Uri" }
+    $structured = $Uri.EndsWith('/api/workflows/proposal-review/defect-ids')
+    if ((-not $structured -and -not $Uri.EndsWith('/api/workflows/proposal-review')) -or $Method -ne 'Post') { throw "Unexpected request: $Uri" }
     $request = $Body | ConvertFrom-Json
     if ($request.allowCloud -ne $false -or $request.proposerModel -cne 'first' -or $request.reviewerModel -cne 'second') {
         throw 'The collector changed the selected models or cloud opt-in.'
     }
-    $null = $directories.Add((Split-Path (Split-Path $OutFile)))
-    $mock.lastOutput = $OutFile
+    $root = Split-Path (Split-Path $OutFile)
+    if ($mock.mode -clike 'comparison*') { $root = Split-Path $root }
+    $null = $directories.Add($root)
+    $mock.lastBatch = $root
     $mock.posts++
     $proposal = @{ model = 'first'; requestId = [guid]::NewGuid(); response = '{"defectIds":[]}';
         durationMs = 9; status = 'SUCCESS'; error = $null }
     $review = @{ model = 'second'; requestId = [guid]::NewGuid(); response = '{"defectIds":[]}';
         durationMs = 11; status = 'SUCCESS'; error = $null }
+    if ($mock.mode -ceq 'comparison') {
+        if ($mock.posts -eq 1) { $proposal.response = '```json' + "`n" + $proposal.response + "`n" + '```' }
+        if ($structured -and $mock.posts -eq 2) {
+            $proposal.response = '{"defectIds":["Z"]}'
+            $review.status = 'FAILED'
+            $review.error = @{ code = 'OUTPUT_FORMAT_ERROR' }
+            $review.response = '```json' + "`n" + $review.response + "`n" + '```'
+        }
+        if (-not $structured -and $mock.posts -eq 4) {
+            $review.status = 'FAILED'
+            $review.error = @{ code = 'TIMEOUT' }
+            $review.response = $null
+        }
+    }
     if ($mock.mode -ceq 'control-diagnostic' -and $mock.posts -eq 1) {
         $proposal.response = '```json' + "`n" + $proposal.response + "`n" + '```'
         $review.response = '```json' + "`n" + '{"defectIds":["A"]}' + "`n" + '```'
@@ -58,11 +75,17 @@ function Invoke-WebRequest($Uri, $TimeoutSec, $MaximumRedirection, [switch]$NoPr
             4 { $proposal.response.Replace('```json', '```JSON') }
         }
     }
-    if ($mock.mode -ceq 'duplicate') { $proposal.requestId = $mock.reusedId }
+    if ($mock.mode -cin 'duplicate', 'comparison-duplicate') { $proposal.requestId = $mock.reusedId }
     if ($mock.mode -cin 'skipped', 'control-skipped') {
         $proposal.status = 'FAILED'
         $proposal.error = @{ code = 'TIMEOUT'; message = 'Test timeout' }
         $proposal.response = $null
+        $review = @{ model = 'second'; requestId = $null; response = $null; durationMs = 0;
+            status = 'SKIPPED'; error = @{ code = 'PROPOSAL_FAILED' } }
+    }
+    if ($mock.mode -ceq 'comparison-storage') {
+        $proposal.status = 'FAILED'
+        $proposal.error = @{ code = 'HISTORY_UNAVAILABLE' }
         $review = @{ model = 'second'; requestId = $null; response = $null; durationMs = 0;
             status = 'SKIPPED'; error = @{ code = 'PROPOSAL_FAILED' } }
     }
@@ -82,7 +105,8 @@ function Invoke-WebRequest($Uri, $TimeoutSec, $MaximumRedirection, [switch]$NoPr
 }
 
 try {
-    foreach ($mode in @('valid', 'skipped', 'cloud', 'missing', 'prompt', 'context', 'response', 'duplicate', 'diagnostic', 'control', 'control-skipped', 'control-diagnostic')) {
+    foreach ($mode in @('valid', 'skipped', 'cloud', 'missing', 'prompt', 'context', 'response', 'duplicate', 'diagnostic',
+            'control', 'control-skipped', 'control-diagnostic', 'comparison', 'comparison-duplicate', 'comparison-storage')) {
         $mock.mode = $mode
         $mock.posts = 0
         $mock.controlPosts = 0
@@ -93,17 +117,33 @@ try {
             'context' { 'Saved review inputs differ*' }
             'response' { 'History row did not match*' }
             'duplicate' { 'Duplicate execution ID:*' }
+            'comparison-duplicate' { 'Duplicate execution ID:*' }
+            'comparison-storage' { 'History storage failed*' }
         }
         try {
-            $options = if ($mode -clike 'control*') { @{ DatasetVersion = '2'; IncludeSelfReview = $true } } else { @{} }
+            $options = if ($mode -clike 'control*') { @{ DatasetVersion = '2'; IncludeSelfReview = $true } }
+            elseif ($mode -clike 'comparison*') { @{ DatasetVersion = '2'; StructuredComparisonV1 = $true } } else { @{} }
             $file = & $collector -ProposerModel first -ReviewerModel second @options
             if ($expectedError) { throw "Collector accepted $mode evidence." }
             $summary = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
             $expectedComparison = if ($mode -cin 'skipped', 'control-skipped') { 'UNAVAILABLE' } else { 'TIE' }
-            $taskCount = if ($options.IncludeSelfReview) { 6 } else { 4 }
+            $taskCount = if ($options.StructuredComparisonV1) { 12 } elseif ($options.IncludeSelfReview) { 6 } else { 4 }
             if ($mock.posts -ne $taskCount -or $summary.tasks.Count -ne $taskCount -or
-                @($summary.tasks | Where-Object { $_.score.comparison -cne $expectedComparison }).Count) {
+                (-not $options.StructuredComparisonV1 -and @($summary.tasks | Where-Object { $_.score.comparison -cne $expectedComparison }).Count)) {
                 throw "Wrong collection result for $mode ($($mock.posts) dispatches, $($summary.tasks.Count) tasks, $($summary.tasks.score.comparison -join ','))."
+            }
+            if ($mode -ceq 'comparison') {
+                $order = @('standard', 'structured', 'structured', 'standard') * 3
+                $standardReview = $summary.metrics | Where-Object { $_.arm -ceq 'standard' -and $_.role -ceq 'review' }
+                $structuredReview = $summary.metrics | Where-Object { $_.arm -ceq 'structured' -and $_.role -ceq 'review' }
+                if (($summary.tasks.arm -join ',') -cne ($order -join ',') -or $summary.metrics.Count -ne 4 -or
+                    $summary.tasks[0].score.promptSha256 -cne $summary.tasks[1].score.promptSha256 -or
+                    $summary.tasks[0].score.proposal.score.outcome -cne 'FORMAT_ERROR' -or
+                    $summary.tasks[1].score.proposal.score.outcome -cne 'WRONG_ANSWER' -or
+                    ($summary.tasks[1].score.proposal.score.falsePositives -join ',') -cne 'Z' -or
+                    $structuredReview.formatErrors -ne 1 -or ($standardReview.executionFailures -join ',') -cne 'TIMEOUT') {
+                    throw 'Incorrect paired comparison results.'
+                }
             }
             if ($mode -ceq 'control' -and ($mock.controlPosts -ne 6 -or -not $summary.selfReviewRequested -or
                 $summary.tasks[0].score.datasetVersion -cne '2' -or $summary.tasks[0].score.reviewVsSelfReview -cne 'REGRESSED' -or
@@ -144,10 +184,10 @@ try {
             }
         } catch {
             if (-not $expectedError -or $_.Exception.Message -cnotlike $expectedError) { throw }
-            $expectedPosts = if ($mode -ceq 'cloud') { 0 } elseif ($mode -ceq 'duplicate') { 2 } else { 1 }
+            $expectedPosts = if ($mode -ceq 'cloud') { 0 } elseif ($mode -cin 'duplicate', 'comparison-duplicate') { 2 } else { 1 }
             if ($mock.posts -ne $expectedPosts) { throw "Unexpected dispatch count for $mode." }
             if ($mock.posts -gt 0) {
-                $directory = Split-Path (Split-Path $mock.lastOutput)
+                $directory = $mock.lastBatch
                 if (Test-Path -LiteralPath (Join-Path $directory 'summary.json')) { throw 'Invalid batch has a summary.' }
             }
         }
@@ -156,7 +196,7 @@ try {
 } finally {
     foreach ($directory in $directories) {
         $full = [IO.Path]::GetFullPath($directory)
-        if ((Split-Path $full) -ceq $target -and (Split-Path $full -Leaf) -cmatch '^proposal-review-(?:pilot|fence-diagnostic)-[0-9a-f]{32}$') {
+        if ((Split-Path $full) -ceq $target -and (Split-Path $full -Leaf) -cmatch '^proposal-review-(?:pilot|fence-diagnostic|structured-v1)-[0-9a-f]{32}$') {
             Remove-Item -LiteralPath $full -Recurse
         }
     }

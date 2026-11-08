@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)][string]$TaskId,
     [string]$WorkflowPath,
     [ValidateSet('1', '2')][string]$DatasetVersion = '1',
-    [string]$SelfReviewPath
+    [string]$SelfReviewPath,
+    [switch]$StructuredComparisonV1
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,6 +19,10 @@ $allowed = [string[]]@($task.findings.Keys)
 $expected = @($task.expectedDefectIds)
 
 function Get-Score($Step) {
+    if ($StructuredComparisonV1 -and $Step.status -ceq 'FAILED' -and $Step.error.code -ceq 'OUTPUT_FORMAT_ERROR') {
+        if ($Step.response -isnot [string]) { throw 'Missing raw text for an output format failure.' }
+        return [ordered]@{ outcome = 'FORMAT_ERROR'; truePositives = $null; falsePositives = $null; missedDefects = $null }
+    }
     if ($Step.status -cne 'SUCCESS') {
         return [ordered]@{ outcome = 'UNAVAILABLE'; truePositives = $null; falsePositives = $null; missedDefects = $null }
     }
@@ -35,7 +40,7 @@ function Get-Score($Step) {
         foreach ($item in $fields[0].Value.EnumerateArray()) {
             if ($item.ValueKind -ne 'String') { return $formatError }
             $id = $item.GetString()
-            if ($id -cnotin $allowed -or -not $selected.Add($id)) { return $formatError }
+            if ((-not $StructuredComparisonV1 -and $id -cnotin $allowed) -or -not $selected.Add($id)) { return $formatError }
         }
     } catch [System.Text.Json.JsonException], [InvalidOperationException] {
         return $formatError
@@ -44,7 +49,11 @@ function Get-Score($Step) {
     }
 
     $truePositives = @($expected | Where-Object { $selected.Contains($_) })
-    $falsePositives = @($allowed | Where-Object { $_ -cnotin $expected -and $selected.Contains($_) })
+    $falsePositives = @(if ($StructuredComparisonV1) {
+        [string[]]$falseIds = @($selected | Where-Object { $_ -cnotin $expected })
+        [Array]::Sort($falseIds, [StringComparer]::Ordinal)
+        $falseIds
+    } else { $allowed | Where-Object { $_ -cnotin $expected -and $selected.Contains($_) } })
     $missedDefects = @($expected | Where-Object { -not $selected.Contains($_) })
     [ordered]@{
         outcome = if ($falsePositives.Count -or $missedDefects.Count) { 'WRONG_ANSWER' } else { 'PASS' }
@@ -92,6 +101,9 @@ $prompt = @($task.task, "$($task.language) source:", $task.code, 'Candidate find
 if ($SelfReviewPath -and (-not $WorkflowPath -or $DatasetVersion -cne '2')) {
     throw 'A same-model control requires a v2 workflow.'
 }
+if ($StructuredComparisonV1 -and ($DatasetVersion -cne '2' -or $SelfReviewPath)) {
+    throw 'Structured-output comparison v1 requires v2 fixtures without the same-model control.'
+}
 if (-not $WorkflowPath) { return $prompt }
 
 $workflowBytes = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $WorkflowPath).ProviderPath)
@@ -136,4 +148,5 @@ if ($SelfReviewPath) {
     $report.selfReview = $control
     $report.reviewVsSelfReview = Compare-Outcome $control.score.outcome $review.score.outcome
 }
+if ($StructuredComparisonV1) { $report.scoringProtocol = 'structured-output-comparison-v1' }
 $report | ConvertTo-Json -Depth 6
