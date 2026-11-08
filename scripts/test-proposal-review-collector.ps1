@@ -29,6 +29,15 @@ function Invoke-WebRequest($Uri, $TimeoutSec, $MaximumRedirection, [switch]$NoPr
         durationMs = 9; status = 'SUCCESS'; error = $null }
     $review = @{ model = 'second'; requestId = [guid]::NewGuid(); response = '{"defectIds":[]}';
         durationMs = 11; status = 'SUCCESS'; error = $null }
+    if ($mock.mode -ceq 'diagnostic') {
+        $proposal.response = ('```json' + "`r`n" + '{"defectIds":[]}' + "`r`n" + '```')
+        $review.response = switch ($mock.posts) {
+            1 { ('```json' + "`n" + '{"defectIds":["B","A"]}' + "`n" + '```') }
+            2 { 'Prose before the block.' + "`n" + $proposal.response }
+            3 { $proposal.response + "`n" + $proposal.response }
+            4 { $proposal.response.Replace('```json', '```JSON') }
+        }
+    }
     if ($mock.mode -ceq 'duplicate') { $proposal.requestId = $mock.reusedId }
     if ($mock.mode -ceq 'skipped') {
         $proposal.status = 'FAILED'
@@ -53,7 +62,7 @@ function Invoke-WebRequest($Uri, $TimeoutSec, $MaximumRedirection, [switch]$NoPr
 }
 
 try {
-    foreach ($mode in @('valid', 'skipped', 'cloud', 'missing', 'prompt', 'context', 'response', 'duplicate')) {
+    foreach ($mode in @('valid', 'skipped', 'cloud', 'missing', 'prompt', 'context', 'response', 'duplicate', 'diagnostic')) {
         $mock.mode = $mode
         $mock.posts = 0
         $expectedError = switch ($mode) {
@@ -73,6 +82,24 @@ try {
                 @($summary.tasks | Where-Object { $_.score.comparison -cne $expectedComparison }).Count) {
                 throw "Wrong collection result for $mode ($($mock.posts) dispatches, $($summary.tasks.Count) tasks, $($summary.tasks.score.comparison -join ','))."
             }
+            if ($mode -ceq 'diagnostic') {
+                $replay = Join-Path $PSScriptRoot 'replay-proposal-review-json-fences.ps1'
+                $report = & $replay -PilotDirectory $file.DirectoryName
+                $null = $directories.Add($report.DirectoryName)
+                $diagnostic = Get-Content -LiteralPath $report.FullName -Raw | ConvertFrom-Json
+                if (($diagnostic.tasks.comparison -join ',') -cne 'IMPROVED,UNAVAILABLE,UNAVAILABLE,UNAVAILABLE' -or
+                    ($diagnostic.tasks.reviewExtraction -join ',') -cne 'EXTRACTED,REJECTED,REJECTED,REJECTED') {
+                    throw 'Incorrect fence diagnostic decisions.'
+                }
+                $workflowPath = Join-Path $file.DirectoryName 'java-positive-sum/workflow.json'
+                Add-Content -LiteralPath $workflowPath -Value ''
+                try {
+                    $null = & $replay -PilotDirectory $file.DirectoryName
+                    throw 'Diagnostic accepted a modified raw workflow file.'
+                } catch {
+                    if ($_.Exception.Message -cnotlike 'Raw verdict or workflow hash differs*') { throw }
+                }
+            }
         } catch {
             if (-not $expectedError -or $_.Exception.Message -cnotlike $expectedError) { throw }
             $expectedPosts = if ($mode -ceq 'cloud') { 0 } elseif ($mode -ceq 'duplicate') { 2 } else { 1 }
@@ -87,7 +114,7 @@ try {
 } finally {
     foreach ($directory in $directories) {
         $full = [IO.Path]::GetFullPath($directory)
-        if ((Split-Path $full) -ceq $target -and (Split-Path $full -Leaf) -cmatch '^proposal-review-pilot-[0-9a-f]{32}$') {
+        if ((Split-Path $full) -ceq $target -and (Split-Path $full -Leaf) -cmatch '^proposal-review-(?:pilot|fence-diagnostic)-[0-9a-f]{32}$') {
             Remove-Item -LiteralPath $full -Recurse
         }
     }

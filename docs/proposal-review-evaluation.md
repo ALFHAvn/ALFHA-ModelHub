@@ -73,10 +73,33 @@ and reproduced their original scores on offline replay.
 
 Median elapsed time for the complete workflow request was 15,550 ms. Every
 response was wrapped in a Markdown JSON fence. Strict grading therefore
-recorded four ties at failure. The pilot gives no evidence about whether
-review improved defect detection within the enclosed answers. A separate
-offline analysis can score a single unambiguous JSON block from each saved
-response while preserving the raw scores and making zero new model calls.
+recorded four ties at failure.
+
+## Offline JSON fence diagnostic
+
+The replay verified the four raw workflow hashes, eight unique execution IDs,
+saved history, and strict scores. It accepted a single lowercase `json`
+Markdown block with no surrounding prose, then passed the enclosed content
+to the same exact-set scorer. It made zero model calls and wrote derived
+responses and `diagnostic.json` to a new ignored directory under `target`.
+
+```powershell
+./scripts/replay-proposal-review-json-fences.ps1 -PilotDirectory ./target/proposal-review-pilot-c4510968cac145ba99820d7ac76aa0a4
+```
+
+| Fixture | Proposal after extraction | Review after extraction | Change in findings |
+| --- | --- | --- | --- |
+| Java positive sum | Pass | Pass | Both found A and B |
+| Java prefix clean control | Wrong answer | Wrong answer | Review added false alarm B |
+| SQL access precedence | Wrong answer | Wrong answer | Both found A and falsely reported C |
+| SQL empty category clean control | Wrong answer | Wrong answer | Review added false alarm B |
+
+Both roles passed one of four examples after extraction. The reviewer found
+the same three actual defects and increased the total false alarms from four
+to six. The original zero-pass scores remain the strict campaign result.
+The diagnostic covers one model pairing and one attempt per fixture. A
+follow-up should include more independent examples and a same-model review
+control before attributing any effect to the second model.
 
 ## Paired evaluation protocol
 
