@@ -36,12 +36,16 @@ public class BenchmarkService {
         this.deployment = deployment;
     }
     public BenchmarkReport run(BenchmarkRequest request) {
-        return run(request, false);
+        return run(request, RawJavaFormat.STANDARD);
     }
     public BenchmarkReport runStrictRaw(BenchmarkRequest request) {
-        return run(request, true);
+        return run(request, RawJavaFormat.BOUNDARY);
     }
-    private BenchmarkReport run(BenchmarkRequest request, boolean strictRaw) {
+    public BenchmarkReport runStrictRawV2(BenchmarkRequest request) {
+        return run(request, RawJavaFormat.ENVELOPE);
+    }
+    private BenchmarkReport run(BenchmarkRequest request, RawJavaFormat format) {
+        boolean strictRaw = format != RawJavaFormat.STANDARD;
         if (request == null || request.models() == null
                 || request.models().isEmpty() || request.models().size() > 2 || request.models().stream().anyMatch(Objects::isNull)
                 || new HashSet<>(request.models()).size() != request.models().size()
@@ -99,7 +103,7 @@ public class BenchmarkService {
                     String score = "NOT_SCORED";
                     if ("SUCCESS".equals(execution.status())) {
                         if (task.rule() == BenchmarkDataset.Rule.JAVA_CODING) {
-                            evaluation = codingEvaluator.evaluate(task, dataset.version(), execution.response(), strictRaw);
+                            evaluation = codingEvaluator.evaluate(task, dataset.version(), execution.response(), format);
                             score = switch (evaluation.outcome()) {
                                 case PASS -> "PASS";
                                 case INFRASTRUCTURE_ERROR -> "NOT_SCORED";
@@ -112,7 +116,7 @@ public class BenchmarkService {
                     results.add(new Result(task.id(), execution, score, attempts, evaluation));
                 }
             }
-            String scoringVersion = strictRaw ? "java-coding-raw-v1" : coding ? "java-coding-v1" : "objective-v1";
+            String scoringVersion = coding ? format.scoringVersion : "objective-v1";
             var report = new BenchmarkReport(UUID.randomUUID(), started, Instant.now(),
                     catalog.hash(dataset.id(), dataset.version()), scoringVersion,
                     dataset, configs, List.copyOf(results), selected.stream().map(model -> summarize(model, results)).toList(),

@@ -40,10 +40,10 @@ public class DockerCodingEvaluator {
     public boolean enabled() { return script != null; }
 
     public CodingEvaluation evaluate(Task task, String version, String source) {
-        return evaluate(task, version, source, false);
+        return evaluate(task, version, source, RawJavaFormat.STANDARD);
     }
 
-    CodingEvaluation evaluate(Task task, String version, String source, boolean strictRaw) {
+    CodingEvaluation evaluate(Task task, String version, String source, RawJavaFormat format) {
         long started = System.nanoTime();
         if (source == null || source.isBlank() || source.getBytes(StandardCharsets.UTF_8).length > 16_384)
             return failure(Outcome.INVALID_SUBMISSION, started);
@@ -54,7 +54,7 @@ public class DockerCodingEvaluator {
         Process process = null;
         boolean verified = false;
         try {
-            if (strictRaw && hasBoundaryFence(source)) {
+            if (format.rejects(source)) {
                 return new CodingEvaluation(Outcome.FORMAT_ERROR, hash(source), null, null, elapsed(started), List.of());
             }
             if (script == null || !Files.isRegularFile(script)) return failure(Outcome.INFRASTRUCTURE_ERROR, started);
@@ -73,8 +73,8 @@ public class DockerCodingEvaluator {
 
             RunnerReport report = mapper.readValue(Files.readString(output), RunnerReport.class);
             String sourceHash = hash(source);
-            // Strict v2 changes the prompt only. The sandbox and its case fixture remain pinned to v1.
-            String graderVersion = strictRaw && "2".equals(version) ? "1" : version;
+            // Dataset v2 changes the prompt only. The sandbox and its case fixture remain pinned to v1.
+            String graderVersion = format != RawJavaFormat.STANDARD && "2".equals(version) ? "1" : version;
             if (report == null || !task.id().equals(report.taskId()) || !graderVersion.equals(report.taskVersion())
                     || !fixtureHash.equalsIgnoreCase(report.taskSha256())
                     || !sourceHash.equalsIgnoreCase(report.sourceSha256())
@@ -107,15 +107,6 @@ public class DockerCodingEvaluator {
             delete(output);
             delete(directory);
         }
-    }
-
-    private static boolean hasBoundaryFence(String source) {
-        var lines = source.strip().lines().toList();
-        return startsFence(lines.getFirst()) || startsFence(lines.getLast().stripLeading());
-    }
-
-    private static boolean startsFence(String line) {
-        return line.startsWith("```") || line.startsWith("~~~");
     }
 
     private static void removeContainers(Task task, String runId) {

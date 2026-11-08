@@ -247,6 +247,22 @@ fences. Source that passes the check is sent unchanged to the restricted
 Docker grader for compilation and correctness checks. The route performs
 no fence extraction, repair, or retry.
 
+#### Opt-in prose-envelope grading
+
+Send the same local-model request body to
+`POST /api/benchmarks/java-coding/strict-raw-v2` to use scoring version
+`java-coding-raw-v2`. This route adds the [v2 prose-envelope check](#detector-v2)
+to the boundary check. It recognizes one matching Markdown fence pair after a
+supported introduction, with text following the closing fence. For an
+unlabeled block, the body must start with a simple `class Main` declaration.
+
+A rejected wrapper produces `FORMAT_ERROR` before Docker starts. The raw
+response and its UTF-8 hash remain in the report. Other submissions go to the
+same restricted grader as the existing routes. Both Java dataset versions
+are accepted. Dataset version selects the prompt, while the route selects the
+scoring version. Compare these reports separately from `java-coding-raw-v1`
+reports because the new check can change the verdict for the same response.
+
 #### Raw Java prompt comparison v1
 
 Dataset `java-coding` version `2` is a prompt-only variant. It appends an
@@ -382,7 +398,7 @@ in the generation result.
 | Outcome | Benchmark score |
 | --- | --- |
 | Every case passes | `PASS` |
-| Wrong answer, compilation error, execution error, timeout, output limit, or invalid submission | `FAIL` |
+| Wrong answer, compilation error, execution error, timeout, output limit, invalid submission, or opt-in format rejection | `FAIL` |
 | Provider failure or evaluator infrastructure error | `NOT_SCORED` |
 
 The aggregate coding verdict uses the first non-passing case and retains all

@@ -296,6 +296,7 @@ class BenchmarkIT {
                     String base = base(restarted);
                     int callsBeforeStrict = calls.get();
                     assertEquals(400, coding(client, base, true, "qwen3:4b", "vendor/model:free").statusCode());
+                    assertEquals(400, codingRawV2(client, base, "1", "qwen3:4b", "vendor/model:free").statusCode());
                     assertEquals(400, codingVersion(client, base, false, "2", "qwen3:4b").statusCode());
                     assertEquals(callsBeforeStrict, calls.get());
                     var strictValid = codingVersion(client, base, true, "2", "qwen3:4b");
@@ -331,9 +332,50 @@ class BenchmarkIT {
                     assertEquals(rejectedReport, mapper.readTree(get(client,
                             base + rejected.headers().firstValue("Location").orElseThrow()).body()));
 
+                    String wrapped = "**Below is the source.**\r\n" + fenced + "The implementation sorts the arguments.";
+                    localAnswer.set(wrapped);
+                    var boundaryOnly = coding(client, base, true, "qwen3:4b");
+                    assertEquals(201, boundaryOnly.statusCode(), boundaryOnly.body());
+                    var boundaryReport = mapper.readTree(boundaryOnly.body());
+                    assertEquals("java-coding-raw-v1", boundaryReport.path("scoringVersion").asString());
+                    assertEquals(realCodingRunner ? "COMPILATION_ERROR" : "INFRASTRUCTURE_ERROR",
+                            boundaryReport.path("results").path(0).path("codingEvaluation").path("outcome").asString());
+                    var envelope = codingRawV2(client, base, "1", "qwen3:4b");
+                    assertEquals(201, envelope.statusCode(), envelope.body());
+                    var envelopeReport = mapper.readTree(envelope.body());
+                    var envelopeResult = envelopeReport.path("results").path(0);
+                    assertEquals("java-coding-raw-v2", envelopeReport.path("scoringVersion").asString());
+                    assertEquals(boundaryReport.path("datasetSha256"), envelopeReport.path("datasetSha256"));
+                    assertEquals("FAIL", envelopeResult.path("score").asString());
+                    assertEquals("SUCCESS", envelopeResult.path("execution").path("status").asString());
+                    assertEquals(wrapped, envelopeResult.path("execution").path("response").asString());
+                    var envelopeEvaluation = envelopeResult.path("codingEvaluation");
+                    assertEquals("FORMAT_ERROR", envelopeEvaluation.path("outcome").asString());
+                    assertTrue(envelopeEvaluation.path("imageId").isNull());
+                    assertEquals(0, envelopeEvaluation.path("cases").size());
+                    assertEquals(envelopeReport, mapper.readTree(get(client,
+                            base + envelope.headers().firstValue("Location").orElseThrow()).body()));
+
+                    if (realCodingRunner) {
+                        String rawSource = local.path("execution").path("response").asString();
+                        String withTextBlock = rawSource.replace("public class Main {", "public class Main {\n"
+                                + "    static final String HELP = \"\"\"\n"
+                                + "        Below is a Java example.\n        ````java\n        class Example {}\n        ````\n        End.\n"
+                                + "        \"\"\";\n");
+                        localAnswer.set(withTextBlock);
+                        var clean = codingRawV2(client, base, "2", "qwen3:4b");
+                        assertEquals(201, clean.statusCode(), clean.body());
+                        var cleanReport = mapper.readTree(clean.body());
+                        var cleanResult = cleanReport.path("results").path(0);
+                        assertEquals("java-coding-raw-v2", cleanReport.path("scoringVersion").asString());
+                        assertEquals(validReport.path("datasetSha256"), cleanReport.path("datasetSha256"));
+                        assertEquals(withTextBlock, cleanResult.path("execution").path("response").asString());
+                        assertEquals("PASS", cleanResult.path("codingEvaluation").path("outcome").asString());
+                        assertEquals(6, cleanResult.path("codingEvaluation").path("cases").size());
+                    }
                     localStatus.set(500);
                     try {
-                        var failure = coding(client, base, true, "qwen3:4b");
+                        var failure = codingRawV2(client, base, "1", "qwen3:4b");
                         assertEquals(201, failure.statusCode(), failure.body());
                         var failedResult = mapper.readTree(failure.body()).path("results").path(0);
                         assertEquals("NOT_SCORED", failedResult.path("score").asString());
@@ -371,6 +413,12 @@ class BenchmarkIT {
     }
     private HttpResponse<String> codingVersion(HttpClient client, String base, boolean strictRaw, String version, String... models) throws Exception {
         String path = strictRaw ? "/api/benchmarks/java-coding/strict-raw" : "/api/benchmarks";
+        return codingAt(client, base, path, version, models);
+    }
+    private HttpResponse<String> codingRawV2(HttpClient client, String base, String version, String... models) throws Exception {
+        return codingAt(client, base, "/api/benchmarks/java-coding/strict-raw-v2", version, models);
+    }
+    private HttpResponse<String> codingAt(HttpClient client, String base, String path, String version, String... models) throws Exception {
         String payload = new ObjectMapper().writeValueAsString(java.util.Map.of(
                 "datasetId", "java-coding", "datasetVersion", version, "models", models));
         return client.send(HttpRequest.newBuilder(URI.create(base + path))

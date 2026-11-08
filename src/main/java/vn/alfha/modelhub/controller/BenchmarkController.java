@@ -26,6 +26,10 @@ public class BenchmarkController {
     public ResponseEntity<BenchmarkReport> runStrictRaw(@RequestBody BenchmarkRequest request) {
         return created(service.runStrictRaw(request));
     }
+    @PostMapping("/java-coding/strict-raw-v2")
+    public ResponseEntity<BenchmarkReport> runStrictRawV2(@RequestBody BenchmarkRequest request) {
+        return created(service.runStrictRawV2(request));
+    }
     private ResponseEntity<BenchmarkReport> created(BenchmarkReport report) {
         return ResponseEntity.created(URI.create("/api/benchmarks/" + report.id())).body(report);
     }
