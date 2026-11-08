@@ -296,13 +296,20 @@ class BenchmarkIT {
                     String base = base(restarted);
                     int callsBeforeStrict = calls.get();
                     assertEquals(400, coding(client, base, true, "qwen3:4b", "vendor/model:free").statusCode());
+                    assertEquals(400, codingVersion(client, base, false, "2", "qwen3:4b").statusCode());
                     assertEquals(callsBeforeStrict, calls.get());
-                    var strictValid = coding(client, base, true, "qwen3:4b");
+                    var strictValid = codingVersion(client, base, true, "2", "qwen3:4b");
                     assertEquals(201, strictValid.statusCode(), strictValid.body());
                     var validReport = mapper.readTree(strictValid.body());
                     assertEquals("java-coding-raw-v1", validReport.path("scoringVersion").asString());
-                    assertEquals(codingReport.path("datasetSha256"), validReport.path("datasetSha256"));
-                    var strictEvaluation = validReport.path("results").path(0).path("codingEvaluation");
+                    assertEquals("2", validReport.path("dataset").path("version").asString());
+                    assertNotEquals(codingReport.path("datasetSha256"), validReport.path("datasetSha256"));
+                    var strictResult = validReport.path("results").path(0);
+                    String strictPrompt = validReport.path("dataset").path("tasks").path(0).path("prompt").asString();
+                    assertTrue(strictPrompt.contains("Do not include Markdown fences"));
+                    assertEquals(strictPrompt, jdbc.queryForObject("SELECT prompt FROM execution_runs WHERE request_id = ?::uuid",
+                            String.class, strictResult.path("execution").path("requestId").asString()));
+                    var strictEvaluation = strictResult.path("codingEvaluation");
                     assertEquals(local.path("codingEvaluation").path("outcome"), strictEvaluation.path("outcome"));
                     assertEquals(local.path("codingEvaluation").path("sourceSha256"), strictEvaluation.path("sourceSha256"));
                     assertEquals(realCodingRunner ? 6 : 0, strictEvaluation.path("cases").size());
@@ -360,9 +367,12 @@ class BenchmarkIT {
         return coding(client, base, false, "qwen3:4b", "vendor/model:free");
     }
     private HttpResponse<String> coding(HttpClient client, String base, boolean strictRaw, String... models) throws Exception {
+        return codingVersion(client, base, strictRaw, "1", models);
+    }
+    private HttpResponse<String> codingVersion(HttpClient client, String base, boolean strictRaw, String version, String... models) throws Exception {
         String path = strictRaw ? "/api/benchmarks/java-coding/strict-raw" : "/api/benchmarks";
         String payload = new ObjectMapper().writeValueAsString(java.util.Map.of(
-                "datasetId", "java-coding", "datasetVersion", "1", "models", models));
+                "datasetId", "java-coding", "datasetVersion", version, "models", models));
         return client.send(HttpRequest.newBuilder(URI.create(base + path))
                 .timeout(Duration.ofSeconds(110)).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(payload)).build(), HttpResponse.BodyHandlers.ofString());

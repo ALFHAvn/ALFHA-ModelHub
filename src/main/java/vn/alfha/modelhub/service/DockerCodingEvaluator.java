@@ -73,7 +73,9 @@ public class DockerCodingEvaluator {
 
             RunnerReport report = mapper.readValue(Files.readString(output), RunnerReport.class);
             String sourceHash = hash(source);
-            if (report == null || !task.id().equals(report.taskId()) || !version.equals(report.taskVersion())
+            // Strict v2 changes the prompt only. The sandbox and its case fixture remain pinned to v1.
+            String graderVersion = strictRaw && "2".equals(version) ? "1" : version;
+            if (report == null || !task.id().equals(report.taskId()) || !graderVersion.equals(report.taskVersion())
                     || !fixtureHash.equalsIgnoreCase(report.taskSha256())
                     || !sourceHash.equalsIgnoreCase(report.sourceSha256())
                     || report.imageId() == null || !report.imageId().matches("sha256:[a-f0-9]{64}")

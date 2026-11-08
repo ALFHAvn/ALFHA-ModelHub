@@ -14,6 +14,8 @@ import vn.alfha.modelhub.dto.BenchmarkDataset;
 
 @Component
 public class BenchmarkCatalog {
+    private static final String RAW_JAVA_INSTRUCTION =
+            " Return only the raw Java source. Do not include Markdown fences, a filename, or explanatory text.";
     private record Key(String id, String version) { }
     private record Entry(BenchmarkDataset dataset, String hash) { }
 
@@ -28,12 +30,21 @@ public class BenchmarkCatalog {
                 var dataset = mapper.readValue(bytes, BenchmarkDataset.class);
                 if (!key.id().equals(dataset.id()) || !key.version().equals(dataset.version()))
                     throw new IOException("Dataset identity does not match " + path);
-                // Hash the parsed snapshot so checkout line endings do not change dataset identity.
-                String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                        .digest(mapper.writeValueAsBytes(dataset)));
-                entries.put(key, new Entry(dataset, hash));
+                register(mapper, key, dataset);
             }
         }
+        // This prompt-only variant deliberately uses the same cases as the pinned v1 grader.
+        var baseline = dataset("java-coding", "1");
+        var rawTasks = baseline.tasks().stream().map(task -> new BenchmarkDataset.Task(task.id(),
+                task.prompt() + RAW_JAVA_INSTRUCTION, task.rule(), task.expected(), task.fields(), task.cases())).toList();
+        register(mapper, new Key("java-coding", "2"), new BenchmarkDataset("java-coding", "2", rawTasks));
+    }
+
+    private void register(ObjectMapper mapper, Key key, BenchmarkDataset dataset) throws NoSuchAlgorithmException {
+        // Hash the parsed snapshot so checkout line endings do not change dataset identity.
+        String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(mapper.writeValueAsBytes(dataset)));
+        entries.put(key, new Entry(dataset, hash));
     }
     public BenchmarkDataset dataset() { return dataset("1"); }
     public String hash() { return hash("1"); }

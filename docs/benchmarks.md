@@ -247,6 +247,56 @@ fences. Source that passes the check is sent unchanged to the restricted
 Docker grader for compilation and correctness checks. The route performs
 no fence extraction, repair, or retry.
 
+#### Raw Java prompt comparison v1
+
+Dataset `java-coding` version `2` is a prompt-only variant. It appends an
+explicit instruction to return Java source without Markdown fences, a
+filename, or explanation. Its reports store the exact new prompt and a
+distinct dataset hash. The task ID, scenario family, and six sandbox cases
+are shared with version `1`. The strict route accepts either dataset
+version and uses the same pinned v1 sandbox fixture. Use version `1` on the
+standard benchmark route.
+
+```powershell
+$uri = 'http://127.0.0.1:8080/api/benchmarks/java-coding/strict-raw'
+foreach ($version in '1', '2') {
+  $body = @{ datasetId = 'java-coding'; datasetVersion = $version; models = @('qwen3:4b') } | ConvertTo-Json
+  Invoke-RestMethod $uri -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 300
+}
+```
+
+For the first local comparison, run one request per prompt and model using
+the installed Qwen2.5 Coder 3B and 7B Q4_K_M variants. Run v1 first on 3B and
+v2 first on 7B. Record the model digests, settings, and both dataset hashes
+before collection. The budget is four sequential model calls. Verify each
+report and its distinct execution ID against PostgreSQL history. Count
+format rejection, sandbox verdict, provider failure, and infrastructure
+failure separately. Compare raw responses without extracting source. This
+design measures one Java task with one attempt per model and prompt.
+
+The first comparison ran on 9 November 2026. All four local generations
+succeeded. Both models used Markdown fences in both prompt variants, and none
+of the four original responses passed strict grading.
+
+| Model | v1 baseline | v2 raw-source instruction |
+| --- | --- | --- |
+| Qwen2.5 Coder 3B Q4_K_M | `COMPILATION_ERROR`, 12.33 s generation | `FORMAT_ERROR`, 1.23 s generation |
+| Qwen2.5 Coder 7B Q4_K_M | `COMPILATION_ERROR`, 10.11 s generation | `FORMAT_ERROR`, 12.42 s generation |
+
+The v1 responses had prose before and after the fenced block, so the boundary
+check passed them unchanged to Docker. Both v2 responses contained only a
+fenced block, so the boundary check rejected them before Docker. The explicit
+instruction removed the surrounding prose in this sample. Raw-source
+compliance remained zero out of two in each arm.
+
+The comparison verified four distinct execution IDs and four saved benchmark
+reports against disposable PostgreSQL. It recorded the packaged application
+hash, Ollama version and model settings, dataset hashes, and grader image.
+The local model digests, grader image, and pinned inputs matched before and
+after collection. No responses were extracted or rewritten, and all four
+calls used local Ollama. The sample is too small to estimate a reliable
+format-compliance rate or latency effect.
+
 For manual grading, save a candidate's UTF-8 source as a file and invoke the
 same runner directly.
 

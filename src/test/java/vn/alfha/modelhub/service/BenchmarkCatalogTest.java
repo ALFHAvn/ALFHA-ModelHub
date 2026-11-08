@@ -34,7 +34,18 @@ class BenchmarkCatalogTest {
             }
         }
         assertEquals(Set.of("basics:1", "basics:2", "software-engineering:1", "software-engineering:2",
-                "java-coding:1"), snapshots);
+                "java-coding:1", "java-coding:2"), snapshots);
+    }
+
+    @Test void rawJavaVariantChangesOnlyThePromptAndSnapshotIdentity() throws Exception {
+        var catalog = new BenchmarkCatalog(new ObjectMapper());
+        var baseline = catalog.dataset("java-coding", "1").tasks().getFirst();
+        var treatment = catalog.dataset("java-coding", "2").tasks().getFirst();
+        assertEquals(baseline.prompt() + " Return only the raw Java source. Do not include Markdown fences, a filename, or explanatory text.",
+                treatment.prompt());
+        assertEquals(baseline, new BenchmarkDataset.Task(treatment.id(), baseline.prompt(), treatment.rule(),
+                treatment.expected(), treatment.fields(), treatment.cases()));
+        assertNotEquals(catalog.hash("java-coding", "1"), catalog.hash("java-coding", "2"));
     }
 
     @Test void preservesV1IdentityAndChangesOnlyTheAmbiguousPromptInV2() throws Exception {

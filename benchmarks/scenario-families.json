@@ -84,5 +84,13 @@
     "families": {
       "median-of-three": "integer-order-statistics"
     }
+  },
+  {
+    "id": "java-coding",
+    "version": "2",
+    "sha256": "dd2bc126875466f174ba2da6893feb78fdcd1ef1fae9558142879edf1320e063",
+    "families": {
+      "median-of-three": "integer-order-statistics"
+    }
   }
 ]

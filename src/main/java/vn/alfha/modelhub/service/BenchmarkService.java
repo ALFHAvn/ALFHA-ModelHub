@@ -52,6 +52,8 @@ public class BenchmarkService {
         boolean coding = dataset.tasks().stream().anyMatch(task -> task.rule() == BenchmarkDataset.Rule.JAVA_CODING);
         if (strictRaw && (!"java-coding".equals(dataset.id()) || request.schedule() != null))
             throw new IllegalArgumentException("Strict raw evaluation requires the Java coding dataset and local models");
+        if (coding && "2".equals(dataset.version()) && !strictRaw)
+            throw new IllegalArgumentException("The raw-prompt variant requires strict raw evaluation");
         if (coding && !codingEvaluator.enabled()) throw new CodingDisabledException();
         for (String model : selected) {
             generation.validate(new GenerateRequest(model, "validation"));
