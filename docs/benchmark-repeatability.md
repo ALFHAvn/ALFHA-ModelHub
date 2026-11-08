@@ -310,3 +310,38 @@ task hashes, and grader image IDs. It reports per-model and per-task scores,
 paired outcomes, failure counts, and median latency for successful provider
 calls. Run the split checker with the development reports and collected
 evaluation reports before the release review.
+
+## Offline Markdown fence diagnostic
+
+The frozen local campaign scored all 24 raw submissions as failures. A
+separate replay on 2026-11-08 tested whether grading the code inside a single
+language-labeled Markdown fence changed those outcomes. It used the saved
+responses and the pinned Java and PostgreSQL Docker graders.
+
+| Model | Raw passes | Extracted passes | Extracted failures | Extraction rejected |
+| --- | ---: | ---: | ---: | ---: |
+| Qwen2.5 Coder 3B | 0/12 | 3 | 9 | 0 |
+| Qwen2.5 Coder 7B | 0/12 | 4 | 7 | 1 |
+| Total | 0/24 | 7 | 16 | 1 |
+
+Three submissions passed configuration propagation, three passed the SQL
+window task, and one passed concurrent capacity. No regression-test submission
+passed. One regression-test response had ambiguous fence boundaries and was
+excluded from extraction. The 23 extracted submissions produced 70 case
+results, with 25 passes, 34 compilation errors, and 11 wrong answers.
+
+Run the replay from the repository root with PowerShell 7.2 or later, the
+complete saved campaign under `target/local-held-out-v1`, and the pinned Docker
+images available locally.
+
+```powershell
+./scripts/run-held-out-fence-diagnostic.ps1
+```
+
+The script checks the saved evidence and writes a separate `results.jsonl` under
+a new `target/local-held-out-v1/fence-diagnostic-*` directory. Each record
+links back to the original request ID and records the raw response hash,
+extraction outcome, and any extracted-source hash and grader result. The
+replay makes zero provider calls and leaves the frozen scores intact. It tests
+one extraction rule on 24 responses across four tasks. The diagnostic results
+are unsuitable for ranking models or adding independent routing evidence.
