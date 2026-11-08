@@ -1,5 +1,6 @@
 package vn.alfha.modelhub.service;
 
+import java.util.function.Function;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
@@ -32,18 +33,32 @@ public class ProposalReviewService {
     }
 
     public ProposalReviewResponse run(ProposalReviewRequest request) {
+        return run(request, false);
+    }
+
+    public ProposalReviewResponse runDefectIds(ProposalReviewRequest request) {
+        return run(request, true);
+    }
+
+    private ProposalReviewResponse run(ProposalReviewRequest request, boolean defectIds) {
         var proposer = new GenerateRequest(request.proposerModel(), request.prompt());
         var reviewer = new GenerateRequest(request.reviewerModel(), request.prompt());
         generation.validate(proposer);
         generation.validate(reviewer);
         if (proposer.model().equals(reviewer.model()))
             throw new IllegalArgumentException("Select distinct proposer and reviewer models");
-        boolean allowCloud = Boolean.TRUE.equals(request.allowCloud());
-        validateCloud(proposer.model(), allowCloud);
-        validateCloud(reviewer.model(), allowCloud);
+        if (defectIds) {
+            generation.requireOllama(proposer.model());
+            generation.requireOllama(reviewer.model());
+        } else {
+            boolean allowCloud = Boolean.TRUE.equals(request.allowCloud());
+            validateCloud(proposer.model(), allowCloud);
+            validateCloud(reviewer.model(), allowCloud);
+        }
 
-        // Reuse the zero-price generation path without asking the routing policy to select either model.
-        var proposal = generation.generateRouted(proposer);
+        // Keep the zero-price cap for explicitly selected cloud models in the standard workflow.
+        Function<GenerateRequest, GenerateResponse> dispatch = defectIds ? generation::generateDefectIds : generation::generateRouted;
+        var proposal = dispatch.apply(proposer);
         if (!"SUCCESS".equals(proposal.status()))
             return skipped(proposal, reviewer.model(), "PROPOSAL_FAILED", "Review requires a successful proposal");
         if (proposal.response().isBlank())
@@ -52,7 +67,7 @@ public class ProposalReviewService {
         String reviewPrompt = REVIEW_INSTRUCTIONS + mapper.writeValueAsString(new ReviewInput(request.prompt(), proposal.response()));
         if (!GenerationService.validPrompt(reviewPrompt))
             return skipped(proposal, reviewer.model(), "REVIEW_INPUT_TOO_LONG", "Task and proposal exceed the review prompt limit");
-        return new ProposalReviewResponse(proposal, generation.generateRouted(new GenerateRequest(reviewer.model(), reviewPrompt)));
+        return new ProposalReviewResponse(proposal, dispatch.apply(new GenerateRequest(reviewer.model(), reviewPrompt)));
     }
 
     private void validateCloud(String model, boolean allowCloud) {

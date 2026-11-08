@@ -17,4 +17,9 @@ public class ProposalReviewController {
     public ProposalReviewResponse run(@RequestBody ProposalReviewRequest request) {
         return service.run(request);
     }
+
+    @PostMapping("/api/workflows/proposal-review/defect-ids")
+    public ProposalReviewResponse runDefectIds(@RequestBody ProposalReviewRequest request) {
+        return service.runDefectIds(request);
+    }
 }

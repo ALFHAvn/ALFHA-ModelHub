@@ -23,6 +23,9 @@ import vn.alfha.modelhub.exception.ProviderException;
 public class GenerationService {
     private static final ObjectReader JSON_READER = new ObjectMapper().reader()
             .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS, DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY);
+    private static final Map<String, ?> DEFECT_IDS_SCHEMA = Map.of("type", "object",
+            "properties", Map.of("defectIds", Map.of("type", "array", "items", Map.of("type", "string"))),
+            "required", List.of("defectIds"), "additionalProperties", false);
     private final java.util.function.Function<String, ModelProvider> providers;
     private HistoryService history;
     @Autowired
@@ -62,8 +65,7 @@ public class GenerationService {
     public GenerateResponse generateJson(JsonGenerateRequest request) {
         var input = new GenerateRequest(request.model(), request.prompt());
         validate(input);
-        if (!(providers.apply(input.model()) instanceof OllamaProvider ollama))
-            throw new IllegalArgumentException("JSON generation requires an Ollama model");
+        var ollama = requireOllama(input.model());
 
         var names = request.requiredStringFields();
         if (names == null || names.isEmpty() || names.size() > 16 || names.stream().anyMatch(name -> name == null
@@ -76,15 +78,38 @@ public class GenerationService {
         var properties = new LinkedHashMap<String, Map<String, String>>();
         for (String field : fields) properties.put(field, Map.of("type", "string"));
         var schema = Map.of("type", "object", "properties", properties, "required", fields, "additionalProperties", false);
-        return execute(input, () -> ollama.generateJson(input.model(), input.prompt(), schema),
-                response -> matchesJsonContract(response, fields));
+        return generateJson(input, ollama, schema, body -> body.size() == fields.size()
+                && fields.stream().allMatch(field -> body.path(field).isString()));
     }
 
-    private boolean matchesJsonContract(String response, List<String> fields) {
+    OllamaProvider requireOllama(String model) {
+        if (providers.apply(model) instanceof OllamaProvider ollama) return ollama;
+        throw new IllegalArgumentException("JSON generation requires an Ollama model");
+    }
+
+    GenerateResponse generateDefectIds(GenerateRequest input) {
+        validate(input);
+        return generateJson(input, requireOllama(input.model()), DEFECT_IDS_SCHEMA, body -> {
+            var findings = body.path("defectIds");
+            if (body.size() != 1 || !findings.isArray()) return false;
+            var seen = new HashSet<String>();
+            for (JsonNode finding : findings) {
+                if (!finding.isString() || !seen.add(finding.asString())) return false;
+            }
+            return true;
+        });
+    }
+
+    private GenerateResponse generateJson(GenerateRequest input, OllamaProvider ollama, Map<String, ?> schema,
+                                          Predicate<JsonNode> validObject) {
+        return execute(input, () -> ollama.generateJson(input.model(), input.prompt(), schema),
+                response -> matchesJsonContract(response, validObject));
+    }
+
+    private boolean matchesJsonContract(String response, Predicate<JsonNode> validObject) {
         try {
             var body = JSON_READER.readTree(response);
-            return body != null && body.isObject() && body.size() == fields.size()
-                    && fields.stream().allMatch(field -> body.path(field).isString());
+            return body != null && body.isObject() && validObject.test(body);
         } catch (JacksonException e) {
             return false;
         }
@@ -108,7 +133,7 @@ public class GenerationService {
             long duration = elapsed(start);
             execution = validOutput.test(result) ? new GenerateResponse(model, result, duration, "SUCCESS", null)
                     : new GenerateResponse(model, result, duration, "FAILED",
-                            new ApiError("OUTPUT_FORMAT_ERROR", "Expected a JSON object with exactly the requested string fields"));
+                            new ApiError("OUTPUT_FORMAT_ERROR", "Response does not match the requested JSON output contract"));
         } catch (ProviderException e) {
             execution = new GenerateResponse(model, null, elapsed(start), "FAILED",
                     new ApiError(e.code(), e.getMessage(), e.retryAfterMs()));

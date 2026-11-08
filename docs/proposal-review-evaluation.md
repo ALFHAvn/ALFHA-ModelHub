@@ -203,3 +203,33 @@ The first experiment measures defect detection and review under a fixed output
 contract. Measuring whether feedback leads to better code would require a
 separately designed revision step and grading in the existing restricted
 sandboxes. The first local pilot covers four tasks with one attempt each.
+
+## Structured-output comparison v1
+
+Use the six existing v2 fixtures in a fresh paired batch. The two arms call
+`/api/workflows/proposal-review` and `/api/workflows/proposal-review/defect-ids`
+with the same model roles and original task prompts. Run one workflow per arm
+per task, alternate which arm runs first by fixture order, and cap the batch
+at 24 sequential local generations. Record the backend commit, fixture hash,
+model digests, Ollama settings, and actual arm order. Keep this batch separate
+from the published v1 and v2 results.
+
+Score the original text from both arms. Count a malformed standard response
+or `OUTPUT_FORMAT_ERROR` as a format failure. A conforming `defectIds` array
+with incorrect membership, including unknown IDs, is an incorrect answer.
+Report exact-set passes over all planned steps and over conforming responses.
+Show skipped reviews, provider failures, and storage failures separately.
+Verify each attempted step's request ID and raw response against history and
+check uniqueness across both arms. The two review inputs can differ because
+each reviewer receives its own arm's proposal. The comparison measures the
+effect of structured output across the whole workflow.
+
+Use the same raw score categories in both arms. The historical collector and
+scorer still implement their frozen protocol. Collection and reporting for
+this paired protocol remain separate from those tools.
+
+In a two-call smoke test on a synthetic task, Qwen2.5 Coder 3B and 7B both
+returned valid JSON. They reported IDs outside the task's candidate list.
+This confirms the endpoint can enforce shape while the experiment still
+needs to measure answer correctness separately. The smoke test is outside
+the paired batch.

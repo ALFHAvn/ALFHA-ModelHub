@@ -358,6 +358,23 @@ cloud reviewer sends the original prompt and the proposal to OpenRouter.
 
 [Objective evaluation plan](docs/proposal-review-evaluation.md)
 
+### Opt-in defect ID output
+
+For defect-identification tasks, send the same request body to
+`POST /api/workflows/proposal-review/defect-ids`. Select two configured,
+installed Ollama models and describe the candidate IDs in the prompt. Both
+steps receive an Ollama schema for a JSON object containing only `defectIds`,
+an array of unique strings. An empty array is valid. The API checks shape
+and uniqueness. Whether the IDs identify real defects depends on the task.
+
+A rejected step retains its original response and reports
+`OUTPUT_FORMAT_ERROR`. A rejected proposal skips review, and a rejected
+review leaves the proposal available. The structured route uses the same
+task prompt and review template as the standard route, with no extraction or
+retry.
+
+[Structured-output comparison protocol](docs/proposal-review-evaluation.md#structured-output-comparison-v1)
+
 ## Execution history
 
 Provide a dedicated PostgreSQL database and role with schema creation/migration
