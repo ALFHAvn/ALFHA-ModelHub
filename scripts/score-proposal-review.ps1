@@ -1,4 +1,4 @@
-#Requires -Version 7.2
+#Requires -Version 7.5
 param(
     [Parameter(Mandatory)][string]$TaskId,
     [string]$WorkflowPath
@@ -91,7 +91,7 @@ if (-not $WorkflowPath) { return $prompt }
 
 $workflowBytes = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $WorkflowPath).ProviderPath)
 $workflowText = [Text.UTF8Encoding]::new($false, $true).GetString($workflowBytes).TrimStart([char]0xFEFF)
-$workflow = ConvertFrom-Json -InputObject $workflowText -AsHashtable
+$workflow = ConvertFrom-Json -InputObject $workflowText -AsHashtable -DateKind String
 $proposal = Read-Step $workflow.proposal $false
 $review = Read-Step $workflow.review $true
 if ($proposal.model -ceq $review.model -or $proposal.requestId -eq $review.requestId -or

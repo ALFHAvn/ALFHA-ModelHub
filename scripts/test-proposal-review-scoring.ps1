@@ -1,4 +1,4 @@
-#Requires -Version 7.2
+#Requires -Version 7.5
 $ErrorActionPreference = 'Stop'
 $scorer = Join-Path $PSScriptRoot 'score-proposal-review.ps1'
 $directory = New-Item -ItemType Directory -Path (Join-Path $PSScriptRoot "../target/proposal-review-test-$([guid]::NewGuid())")
@@ -34,7 +34,8 @@ try {
 
     foreach ($invalid in @('```json {"defectIds":[]} ```', '{"defectIds":[]} {}', '{"defectIds":["A","A"]}',
             '{"defectIds":[],"defectIds":[]}', '{"defectIds":[],"extra":1}', '{"defectIds":["Z"]}',
-            '{"defectIds":["a"]}', '{"defectIds":[1]}', '{"defectIds":"A"}', '{"defectIds":["\ud800"]}', '[]', '')) {
+            '{"defectIds":["a"]}', '{"defectIds":[1]}', '{"defectIds":"A"}', '{"defectIds":["\ud800"]}',
+            '2026-11-08T15:00:00Z', '[]', '')) {
         $result = Get-Result $taskId $correct (New-Step 'other' $invalid)
         if ($result.comparison -cne 'REGRESSED' -or $result.review.score.outcome -cne 'FORMAT_ERROR') {
             throw "Accepted malformed response: $invalid"
