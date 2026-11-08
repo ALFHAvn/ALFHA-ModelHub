@@ -409,6 +409,31 @@ scored outcomes and `failed` counts unscored outcomes. Candidate stdout and
 stderr are omitted from reports. The standalone script prints its JSON report
 and exits with an error for infrastructure failures.
 
+#### Coding report breakdown
+
+New Java coding reports include a `coding` object in each model summary.
+`sandboxVerdicts` counts submissions with a verified grader verdict.
+`sandboxOutcomes` groups those verdicts by outcome, so `PASS`, `WRONG_ANSWER`,
+and compilation, execution, timeout, or output-limit failures remain separate.
+Outcome keys with zero observations are omitted. `invalidSubmissions` counts
+empty or oversized submissions, and `graderInfrastructureFailures` counts
+attempts where the grader could not return a verified verdict.
+
+For strict raw scoring, `rawFormat.checked` counts submissions that reached
+the format check after generation and size validation. It includes format
+rejections and submissions that proceeded to the grader, even if the grader
+later failed. `rawFormat.rejected` counts only the format rejections. The
+standard route omits `rawFormat`. `executionErrors` groups terminal execution
+failures by error code, including provider and history failures. Retry
+attempts remain in the result details and skipped tasks remain in
+`skippedCloudTasks`.
+
+Use `rawFormat.checked` as the format-rejection denominator and
+`sandboxVerdicts` as the denominator for the share of sandbox submissions
+that passed. Existing summary fields retain their earlier definitions.
+Historical reports and objective benchmark summaries omit the new object.
+[Milestone 12A evidence](structured-output-reliability.md)
+
 The public fixtures measure behavior on six inputs, so hard-coded answers can
 pass. The coding benchmark is synchronous and limited to a single Java source
 file of at most 16 KiB. Container isolation relies on the Docker runtime and

@@ -13,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BenchmarkIT {
@@ -289,10 +290,22 @@ class BenchmarkIT {
                     var cloud = codingReport.path("results").path(1);
                     assertEquals("NOT_SCORED", cloud.path("score").asString());
                     assertFalse(cloud.has("codingEvaluation"));
+                    var standardMetrics = codingReport.path("summaries").path(0).path("coding");
+                    assertEquals(realCodingRunner ? 1 : 0, standardMetrics.path("sandboxVerdicts").asInt(-1));
+                    assertEquals(realCodingRunner ? 0 : 1, standardMetrics.path("graderInfrastructureFailures").asInt(-1));
+                    assertFalse(standardMetrics.has("rawFormat"));
+                    assertEquals(1, codingReport.path("summaries").path(1).path("coding").path("executionErrors")
+                            .path("PROVIDER_ERROR").asInt());
                     assertEquals(1L, jdbc.queryForObject("SELECT count(*) FROM execution_runs WHERE request_id = ?::uuid",
                             Long.class, local.path("execution").path("requestId").asString()));
                     assertEquals(codingReport, mapper.readTree(get(client,
                             base(restarted) + codingResponse.headers().firstValue("Location").orElseThrow()).body()));
+                    var legacyId = java.util.UUID.randomUUID();
+                    var legacy = ((ObjectNode) codingReport).deepCopy();
+                    legacy.put("id", legacyId.toString());
+                    legacy.path("summaries").forEach(summary -> ((ObjectNode) summary).remove("coding"));
+                    jdbc.update("INSERT INTO benchmark_reports(id, report) VALUES (?, ?::jsonb)", legacyId, mapper.writeValueAsString(legacy));
+                    assertEquals(legacy, mapper.readTree(get(client, base(restarted) + "/api/benchmarks/" + legacyId).body()));
                     String base = base(restarted);
                     int callsBeforeStrict = calls.get();
                     assertEquals(400, coding(client, base, true, "qwen3:4b", "vendor/model:free").statusCode());
@@ -353,6 +366,9 @@ class BenchmarkIT {
                     assertEquals("FORMAT_ERROR", envelopeEvaluation.path("outcome").asString());
                     assertTrue(envelopeEvaluation.path("imageId").isNull());
                     assertEquals(0, envelopeEvaluation.path("cases").size());
+                    var envelopeMetrics = envelopeReport.path("summaries").path(0).path("coding");
+                    assertEquals(0, envelopeMetrics.path("sandboxVerdicts").asInt(-1));
+                    assertEquals(mapper.readTree("{\"checked\":1,\"rejected\":1}"), envelopeMetrics.path("rawFormat"));
                     assertEquals(envelopeReport, mapper.readTree(get(client,
                             base + envelope.headers().firstValue("Location").orElseThrow()).body()));
 
@@ -372,6 +388,9 @@ class BenchmarkIT {
                         assertEquals(withTextBlock, cleanResult.path("execution").path("response").asString());
                         assertEquals("PASS", cleanResult.path("codingEvaluation").path("outcome").asString());
                         assertEquals(6, cleanResult.path("codingEvaluation").path("cases").size());
+                        var cleanMetrics = cleanReport.path("summaries").path(0).path("coding");
+                        assertEquals(1, cleanMetrics.path("sandboxOutcomes").path("PASS").asInt());
+                        assertEquals(mapper.readTree("{\"checked\":1,\"rejected\":0}"), cleanMetrics.path("rawFormat"));
                     }
                     localStatus.set(500);
                     try {

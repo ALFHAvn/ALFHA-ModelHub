@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import tools.jackson.databind.ObjectMapper;
 import vn.alfha.modelhub.dto.*;
+import vn.alfha.modelhub.dto.BenchmarkReport.Result;
+import vn.alfha.modelhub.dto.CodingEvaluation.Outcome;
 import vn.alfha.modelhub.provider.*;
 import vn.alfha.modelhub.exception.ProviderException;
 import vn.alfha.modelhub.repository.BenchmarkRepository;
@@ -49,6 +51,7 @@ class BenchmarkServiceTest {
         var report = service.run(new BenchmarkRequest("basics", List.of("qwen3:4b", "vendor/model:free")));
         assertEquals(20, report.results().size());
         assertEquals(10, report.summaries().get(0).passed());
+        assertNull(report.summaries().get(0).coding());
         assertEquals(1.0, report.summaries().get(0).passRateAllAttempts());
         var cloud = report.summaries().get(1);
         assertEquals(1, cloud.failed());
@@ -59,6 +62,32 @@ class BenchmarkServiceTest {
         assertEquals(catalog.hash(), report.datasetSha256());
         assertEquals(report, service.find(report.id()));
         assertEquals(20, report.results().stream().map(r -> r.execution().requestId()).distinct().count());
+    }
+
+    @Test void separatesRawFormatFromSandboxVerdictsAndTerminalExecutionFailures() {
+        var rows = new ArrayList<Result>();
+        for (Outcome outcome : List.of(Outcome.PASS, Outcome.WRONG_ANSWER, Outcome.COMPILATION_ERROR,
+                Outcome.TIMEOUT, Outcome.FORMAT_ERROR, Outcome.INVALID_SUBMISSION, Outcome.INFRASTRUCTURE_ERROR)) {
+            var execution = new GenerateResponse("model", "original response", 3, "SUCCESS", null);
+            var grade = new CodingEvaluation(outcome, null, null, null, 0, List.of());
+            var earlierFailure = new GenerateResponse("model", null, 3, "FAILED", new ApiError("TIMEOUT", "timed out"));
+            rows.add(new Result("task", execution, outcome == Outcome.PASS ? "PASS" : "FAIL",
+                    List.of(earlierFailure, execution), grade));
+        }
+        for (String code : List.of("RATE_LIMITED", "RATE_LIMITED", "HISTORY_UNAVAILABLE")) {
+            var failure = new GenerateResponse("model", null, 3, "FAILED", new ApiError(code, "failed"));
+            rows.add(new Result("task", failure, "NOT_SCORED", List.of(failure), null));
+        }
+
+        var summary = BenchmarkService.summarizeCoding(rows, true);
+        assertEquals(4, summary.sandboxVerdicts());
+        assertEquals(Map.of(Outcome.PASS, 1, Outcome.WRONG_ANSWER, 1, Outcome.COMPILATION_ERROR, 1, Outcome.TIMEOUT, 1),
+                summary.sandboxOutcomes());
+        assertEquals(1, summary.invalidSubmissions());
+        assertEquals(1, summary.graderInfrastructureFailures());
+        assertEquals(Map.of("RATE_LIMITED", 2, "HISTORY_UNAVAILABLE", 1), summary.executionErrors());
+        assertEquals(new BenchmarkReport.RawFormatSummary(6, 1), summary.rawFormat());
+        assertNull(BenchmarkService.summarizeCoding(rows, false).rawFormat());
     }
     @Test void allFailuresHaveNoSuccessLatencyOrConditionalPassRate() throws Exception {
         ModelProvider failure = (model, prompt) -> { throw new ProviderException("TIMEOUT", "Request timed out"); };

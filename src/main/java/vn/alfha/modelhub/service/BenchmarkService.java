@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import vn.alfha.modelhub.dto.*;
 import vn.alfha.modelhub.dto.BenchmarkReport.*;
+import vn.alfha.modelhub.dto.CodingEvaluation.Outcome;
 import vn.alfha.modelhub.repository.BenchmarkRepository;
 
 @Service
@@ -119,13 +120,13 @@ public class BenchmarkService {
             String scoringVersion = coding ? format.scoringVersion : "objective-v1";
             var report = new BenchmarkReport(UUID.randomUUID(), started, Instant.now(),
                     catalog.hash(dataset.id(), dataset.version()), scoringVersion,
-                    dataset, configs, List.copyOf(results), selected.stream().map(model -> summarize(model, results)).toList(),
+                    dataset, configs, List.copyOf(results), selected.stream().map(model -> summarize(model, results, coding, strictRaw)).toList(),
                     request.schedule(), skippedCloudTasks, deployment.id());
             repository.save(report);
             return report;
         } finally { slot.release(); }
     }
-    private Summary summarize(String model, List<Result> results) {
+    private Summary summarize(String model, List<Result> results, boolean coding, boolean strictRaw) {
         var runs = results.stream().filter(r -> r.execution().model().equals(model)).toList();
         int successful = (int) runs.stream().filter(r -> !"NOT_SCORED".equals(r.score())).count();
         int passed = (int) runs.stream().filter(r -> r.score().equals("PASS")).count();
@@ -133,7 +134,26 @@ public class BenchmarkService {
                 .mapToLong(r -> r.execution().durationMs()).sum();
         return new Summary(model, runs.size(), successful, runs.size() - successful, passed, successful - passed,
                 successful == 0 ? null : (double) passed / successful, runs.isEmpty() ? 0 : (double) passed / runs.size(),
-                successful == 0 ? null : totalTime / successful);
+                successful == 0 ? null : totalTime / successful, coding ? summarizeCoding(runs, strictRaw) : null);
+    }
+
+    static CodingSummary summarizeCoding(List<Result> runs, boolean strictRaw) {
+        var outcomes = new EnumMap<Outcome, Integer>(Outcome.class);
+        var executionErrors = new TreeMap<String, Integer>();
+        for (var run : runs) {
+            if (run.codingEvaluation() != null) {
+                outcomes.merge(run.codingEvaluation().outcome(), 1, Integer::sum);
+            } else if (run.execution().error() != null) {
+                executionErrors.merge(run.execution().error().code(), 1, Integer::sum);
+            }
+        }
+        int invalid = outcomes.getOrDefault(Outcome.INVALID_SUBMISSION, 0);
+        int infrastructure = outcomes.getOrDefault(Outcome.INFRASTRUCTURE_ERROR, 0);
+        int formatRejected = outcomes.getOrDefault(Outcome.FORMAT_ERROR, 0);
+        outcomes.keySet().removeAll(EnumSet.of(Outcome.INVALID_SUBMISSION, Outcome.INFRASTRUCTURE_ERROR, Outcome.FORMAT_ERROR));
+        int sandboxVerdicts = outcomes.values().stream().mapToInt(Integer::intValue).sum();
+        var rawFormat = strictRaw ? new RawFormatSummary(sandboxVerdicts + infrastructure + formatRejected, formatRejected) : null;
+        return new CodingSummary(sandboxVerdicts, Map.copyOf(outcomes), invalid, infrastructure, Map.copyOf(executionErrors), rawFormat);
     }
     public BenchmarkReport find(UUID id) {
         if (repository == null) throw new IllegalStateException("Benchmark persistence is required");
