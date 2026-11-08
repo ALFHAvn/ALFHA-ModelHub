@@ -297,6 +297,28 @@ after collection. No responses were extracted or rewritten, and all four
 calls used local Ollama. The sample is too small to estimate a reliable
 format-compliance rate or latency effect.
 
+#### Offline prose-wrapper diagnostic
+
+The diagnostic looks for a recognized prose introduction followed by one
+nonempty `java`-labeled triple-backtick or triple-tilde block, a matching
+closing fence, and nonblank text after the block. It targets the gap where
+prose on both sides hides a Markdown wrapper from the boundary check. The
+leading introduction requirement keeps fences inside normal Java text blocks
+and comments outside this classification. Unfamiliar introductions,
+unlabeled fences, multiple blocks, and mismatched markers can fall through.
+
+```powershell
+./scripts/check-raw-java-envelope.ps1 -ComparisonDirectory ./target/raw-java-prompt-v1-573e5e20c24b49f4aa1eccdbcfaabe85
+./scripts/test-raw-java-envelope.ps1 -VerifyDocker
+```
+
+The read-only replay matched the four original reports to their execution
+records and verified the raw response hashes. It identified both v1
+prose-wrapped outputs that had reached Docker as compilation failures. Both
+v2 outputs retain their original boundary `FORMAT_ERROR` verdicts. The
+diagnostic produces a separate classification and neither extracts nor
+grades the enclosed code. It made zero model calls.
+
 For manual grading, save a candidate's UTF-8 source as a file and invoke the
 same runner directly.
 
