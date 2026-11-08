@@ -18,6 +18,12 @@ class HistoryIT {
         try (var postgres = new PostgreSQLContainer("postgres:17-alpine")) {
             postgres.start();
             var stub = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+            stub.createContext("/api/tags", exchange -> {
+                byte[] bytes = "{\"models\":[{\"name\":\"qwen3:4b\"}]}".getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, bytes.length);
+                exchange.getResponseBody().write(bytes);
+                exchange.close();
+            });
             stub.createContext("/", exchange -> {
                 boolean cloud = exchange.getRequestURI().getPath().equals("/chat");
                 boolean reviewer = new ObjectMapper().readTree(exchange.getRequestBody().readAllBytes())
@@ -90,6 +96,18 @@ class HistoryIT {
                         assertTrue(saved.path("prompt").asString().contains("Workflow task"));
                         if (role.equals("review")) assertTrue(saved.path("prompt").asString().contains("Hello"));
                     }
+                    var invalidJson = client.send(post(base + "/api/generate/json", """
+                            {"model":"qwen3:4b","prompt":"Return a label","requiredStringFields":["label"]}
+                            """), HttpResponse.BodyHandlers.ofString());
+                    assertEquals(502, invalidJson.statusCode(), invalidJson.body());
+                    var rejected = mapper.readTree(invalidJson.body());
+                    var latest = client.send(HttpRequest.newBuilder(URI.create(base + "/api/runs?size=1")).GET().build(), HttpResponse.BodyHandlers.ofString());
+                    assertEquals(200, latest.statusCode());
+                    var savedRejection = mapper.readTree(latest.body()).path("content").path(0);
+                    assertEquals(rejected.path("requestId"), savedRejection.path("requestId"));
+                    assertEquals("Hello", savedRejection.path("response").asString());
+                    assertEquals("FAILED", savedRejection.path("status").asString());
+                    assertEquals("OUTPUT_FORMAT_ERROR", savedRejection.path("error").path("code").asString());
                     // Simulate storage failure only inside the disposable test database.
                     jdbc.execute("ALTER TABLE execution_runs RENAME TO temporarily_unavailable_runs");
                     var failedSave = client.send(post(base + "/api/generate", "{\"model\":\"qwen3:4b\",\"prompt\":\"Hi\"}"), HttpResponse.BodyHandlers.ofString());
@@ -106,7 +124,7 @@ class HistoryIT {
                 }
                 // Restart verifies durable history and that Flyway does not recreate existing rows.
                 try (var restarted = new SpringApplicationBuilder(ModelHubApplication.class).run(args)) {
-                    assertEquals(5L, restarted.getBean(JdbcTemplate.class).queryForObject("SELECT count(*) FROM execution_runs", Long.class));
+                    assertEquals(6L, restarted.getBean(JdbcTemplate.class).queryForObject("SELECT count(*) FROM execution_runs", Long.class));
                 }
             } finally { stub.stop(0); }
         }

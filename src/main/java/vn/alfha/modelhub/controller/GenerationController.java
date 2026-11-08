@@ -14,6 +14,11 @@ public class GenerationController {
         var result = service.generate(request);
         return ResponseEntity.status(status(result)).body(result);
     }
+    @PostMapping("/api/generate/json")
+    public ResponseEntity<GenerateResponse> generateJson(@RequestBody JsonGenerateRequest request) {
+        var result = service.generateJson(request);
+        return ResponseEntity.status(status(result)).body(result);
+    }
     static int status(GenerateResponse result) {
         return result.error() == null ? 200 : switch (result.error().code()) {
             case "TIMEOUT" -> 504;

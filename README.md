@@ -195,6 +195,47 @@ application called the installed local `qwen3:4b` through `/api/generate` and
 returned `response: Hello`, `status: SUCCESS`, `error: null`, and `durationMs: 6540`.
 The temporary application process was stopped afterward. No model was downloaded.
 
+### Opt-in JSON generation
+
+Use `POST /api/generate/json` with a configured, installed Ollama model when
+the response must be one JSON object with exact top-level string fields.
+
+```powershell
+$body = @{
+  model = 'qwen3:4b'
+  prompt = 'Return a JSON object with the string field label set to ready.'
+  requiredStringFields = @('label')
+} | ConvertTo-Json
+Invoke-RestMethod http://127.0.0.1:8080/api/generate/json -Method Post -ContentType 'application/json' -Body $body
+```
+
+Supply 1 to 16 distinct names matching `[A-Za-z_][A-Za-z0-9_]{0,63}`.
+ModelHub checks the exact installed identifier in Ollama's model inventory and
+rejects entries marked as remote. It sends a schema to Ollama and checks the
+returned text independently. Missing or extra fields, non-string values,
+duplicate keys, malformed JSON, Markdown fences, and trailing text produce
+HTTP 502 with `OUTPUT_FORMAT_ERROR`. The response and execution history retain
+the original text, including formatting errors. Provider failures retain their
+existing error codes. A success means the JSON matched the requested shape.
+The caller still decides whether the values are correct.
+
+On Ollama 0.40.15, one short schema probe each passed for the installed
+`qwen3:4b` and Qwen2.5 Coder 3B and 7B Q4_K_M variants. This checks basic
+compatibility with the format parameter. [Ollama generation API](https://docs.ollama.com/api/generate)
+
+The new endpoint accepts Ollama models only and uses the inventory reported by
+the configured Ollama server. Ollama's own local-only setting can disable its
+cloud features at the server. [Ollama cloud configuration](https://docs.ollama.com/faq#how-do-i-disable-ollamas-cloud-features)
+
+OpenRouter advertises schema output for compatible models and providers. The
+configured `openrouter/free` identifier selects among free models, so it does
+not establish support for a fixed model. Cloud schema generation was not
+tested. [Structured outputs](https://openrouter.ai/docs/guides/features/structured-outputs) · [Free model router](https://openrouter.ai/openrouter/free)
+
+Standard generation, workflows, and benchmark grading continue to use their
+existing contracts. The JSON endpoint stores the original response and creates
+no transformed version. It does not accept arbitrary schemas or raw code.
+
 ## Optional OpenRouter provider
 
 OpenRouter is disabled by default. Configure it through environment variables:
