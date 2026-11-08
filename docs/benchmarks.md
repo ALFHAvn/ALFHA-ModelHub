@@ -210,7 +210,7 @@ runner when starting the application.
 
 ```powershell
 docker pull eclipse-temurin:21-jdk-alpine
-java -jar target/modelhub-0.0.1-SNAPSHOT.jar --server.address=127.0.0.1 --modelhub.coding.runner=scripts/run-java-coding-pilot.ps1
+java -jar target/modelhub-0.2.0.jar --server.address=127.0.0.1 --modelhub.coding.runner=scripts/run-java-coding-pilot.ps1
 ```
 
 Submit this JSON to `POST /api/benchmarks` for a local model run.

@@ -93,7 +93,7 @@ mvn spring-boot:run
 Or run the packaged application after building:
 
 ```shell
-java -jar target/modelhub-0.0.1-SNAPSHOT.jar
+java -jar target/modelhub-0.2.0.jar
 ```
 
 If you use the local Maven cache, include `"-Dmaven.repo.local=.m2/repository"`
@@ -103,7 +103,7 @@ The default port is 8080. Override it with `SERVER_PORT`, for example in PowerSh
 
 ```powershell
 $env:SERVER_PORT = '8081'
-java -jar target/modelhub-0.0.1-SNAPSHOT.jar
+java -jar target/modelhub-0.2.0.jar
 ```
 
 ## Health API

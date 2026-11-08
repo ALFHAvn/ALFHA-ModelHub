@@ -9,7 +9,7 @@ RUN mvn --batch-mode --no-transfer-progress package
 FROM eclipse-temurin:21-jre-alpine
 RUN apk add --no-cache curl && addgroup -S modelhub && adduser -S -G modelhub modelhub
 WORKDIR /app
-COPY --from=build --chown=modelhub:modelhub /workspace/target/modelhub-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=build --chown=modelhub:modelhub /workspace/target/modelhub-0.2.0.jar app.jar
 USER modelhub
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=6 CMD curl --fail --silent http://localhost:8080/api/health || exit 1
