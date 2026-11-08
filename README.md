@@ -21,10 +21,9 @@ models. It is independent of ALFHA Agent.
 - A two-model workflow generates a proposal and then collects feedback from an
   explicitly selected reviewer. [Proposal and review](#two-model-proposal-and-review)
 
-[v0.2.0](https://github.com/ALFHAvn/ALFHA-ModelHub/releases/tag/v0.2.0) is the
-published Milestone 10 release. Proposal and review is part of Milestone 11
-development. Each completed milestone after 10 will receive its own versioned
-release.
+The published Milestone 10 release is [v0.2.0](https://github.com/ALFHAvn/ALFHA-ModelHub/releases/tag/v0.2.0).
+The [v0.3.0 release draft](docs/v0.3.0-release-draft.md) covers the Milestone 11
+proposal-and-review workflow and its local evaluation.
 
 Docker Compose and GitHub Actions are included. The validation notes describe
 which behaviors have been exercised with live providers. [Validation](docs/validation.md)
@@ -97,7 +96,7 @@ mvn spring-boot:run
 Or run the packaged application after building:
 
 ```shell
-java -jar target/modelhub-0.2.0.jar
+java -jar target/modelhub-0.3.0.jar
 ```
 
 If you use the local Maven cache, include `"-Dmaven.repo.local=.m2/repository"`
@@ -107,7 +106,7 @@ The default port is 8080. Override it with `SERVER_PORT`, for example in PowerSh
 
 ```powershell
 $env:SERVER_PORT = '8081'
-java -jar target/modelhub-0.2.0.jar
+java -jar target/modelhub-0.3.0.jar
 ```
 
 ## Health API
