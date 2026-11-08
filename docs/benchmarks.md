@@ -319,6 +319,17 @@ v2 outputs retain their original boundary `FORMAT_ERROR` verdicts. The
 diagnostic produces a separate classification and neither extracts nor
 grades the enclosed code. It made zero model calls.
 
+The expanded offline corpus adds six hand-written Java controls containing
+fence-like text in text blocks, Javadoc, Unicode-escaped block comments,
+ordinary strings, and line comments. The detector flagged zero of six
+controls, and each control passed all six cases in the restricted Docker
+grader. The detector caught five of ten synthetic prose-wrapped responses. The
+five misses cover an unfamiliar introduction, a bolded introduction, a curly
+apostrophe, an unlabeled fence, and a four-backtick fence. The ten wrappers
+were chosen to exercise both supported and unsupported patterns. This result
+describes the rule's coverage on those examples and does not estimate how
+often a model produces each pattern.
+
 For manual grading, save a candidate's UTF-8 source as a file and invoke the
 same runner directly.
 
