@@ -225,6 +225,28 @@ The API takes model IDs and dataset selection. The runner path and container
 configuration come from the trusted operator and repository. The standard
 Compose deployment has coding evaluation disabled.
 
+#### Opt-in raw Java format check
+
+Send the same local-model request body to
+`POST /api/benchmarks/java-coding/strict-raw` to check for a Markdown wrapper
+before grading. This route requires the Java coding dataset, an enabled
+runner, and configured Ollama models identified in the installed model
+inventory. The report uses scoring version `java-coding-raw-v1`. The standard
+route still uses `java-coding-v1` with the same frozen dataset and prompt.
+
+A first or last nonblank line beginning with a backtick or tilde fence of at
+least three characters produces `codingEvaluation.outcome: FORMAT_ERROR`
+and a benchmark score of `FAIL`. The generation remains successful. The
+report retains the original response and its UTF-8 SHA-256 digest, with no
+image ID or case results because Docker was never invoked. The existing
+empty-response and size limits still apply. Provider failures remain
+`NOT_SCORED` and retain their generation error codes.
+
+The check inspects the boundary lines. Java text blocks can contain internal
+fences. Source that passes the check is sent unchanged to the restricted
+Docker grader for compilation and correctness checks. The route performs
+no fence extraction, repair, or retry.
+
 For manual grading, save a candidate's UTF-8 source as a file and invoke the
 same runner directly.
 

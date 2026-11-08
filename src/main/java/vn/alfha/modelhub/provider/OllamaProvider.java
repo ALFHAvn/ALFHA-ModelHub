@@ -39,6 +39,18 @@ public class OllamaProvider implements ModelProvider {
     }
 
     public String generateJson(String model, String prompt, Map<String, ?> schema) {
+        requireInstalledLocalModel(model);
+        var payload = new HashMap<String, Object>(Map.of("model", model, "prompt", prompt, "stream", false));
+        payload.put("format", schema);
+        return generate(payload);
+    }
+
+    public String generateInstalledRaw(String model, String prompt) {
+        requireInstalledLocalModel(model);
+        return generate(model, prompt);
+    }
+
+    private void requireInstalledLocalModel(String model) {
         var inventory = send(HttpRequest.newBuilder(endpoint.resolve("/api/tags")).timeout(timeout).GET().build());
         var models = inventory == null ? null : inventory.path("models");
         if (models == null || !models.isArray() || inventory.has("error"))
@@ -47,14 +59,10 @@ public class OllamaProvider implements ModelProvider {
         for (JsonNode entry : models) {
             if (!model.equals(entry.path("name").asString(null))) continue;
             if (installed || entry.hasNonNull("remote_host") || entry.hasNonNull("remote_model"))
-                throw failure("CONFIGURATION_ERROR", "JSON generation requires an unambiguous locally installed Ollama model");
+                throw failure("CONFIGURATION_ERROR", "An unambiguous locally installed Ollama model is required");
             installed = true;
         }
-        if (!installed) throw failure("CONFIGURATION_ERROR", "JSON generation requires an installed Ollama model identifier");
-
-        var payload = new HashMap<String, Object>(Map.of("model", model, "prompt", prompt, "stream", false));
-        payload.put("format", schema);
-        return generate(payload);
+        if (!installed) throw failure("CONFIGURATION_ERROR", "An installed Ollama model identifier is required");
     }
 
     private String generate(Map<String, ?> payload) {

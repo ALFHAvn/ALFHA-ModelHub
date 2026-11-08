@@ -40,6 +40,10 @@ public class DockerCodingEvaluator {
     public boolean enabled() { return script != null; }
 
     public CodingEvaluation evaluate(Task task, String version, String source) {
+        return evaluate(task, version, source, false);
+    }
+
+    CodingEvaluation evaluate(Task task, String version, String source, boolean strictRaw) {
         long started = System.nanoTime();
         if (source == null || source.isBlank() || source.getBytes(StandardCharsets.UTF_8).length > 16_384)
             return failure(Outcome.INVALID_SUBMISSION, started);
@@ -50,6 +54,9 @@ public class DockerCodingEvaluator {
         Process process = null;
         boolean verified = false;
         try {
+            if (strictRaw && hasBoundaryFence(source)) {
+                return new CodingEvaluation(Outcome.FORMAT_ERROR, hash(source), null, null, elapsed(started), List.of());
+            }
             if (script == null || !Files.isRegularFile(script)) return failure(Outcome.INFRASTRUCTURE_ERROR, started);
             Path target = script.getParent().getParent().resolve("target");
             directory = Files.createTempDirectory(Files.createDirectories(target), "coding-");
@@ -75,7 +82,8 @@ public class DockerCodingEvaluator {
                     || !report.results().stream().map(CaseResult::id).toList()
                             .equals(task.cases().stream().map(c -> c.id()).toList())
                     || report.results().stream().anyMatch(c -> c.outcome() == null || c.durationMs() < 0
-                            || c.outcome() == Outcome.INFRASTRUCTURE_ERROR || c.outcome() == Outcome.INVALID_SUBMISSION))
+                            || c.outcome() == Outcome.INFRASTRUCTURE_ERROR || c.outcome() == Outcome.INVALID_SUBMISSION
+                            || c.outcome() == Outcome.FORMAT_ERROR))
                 return failure(Outcome.INFRASTRUCTURE_ERROR, started);
             verified = true;
             Outcome outcome = report.results().stream().map(CaseResult::outcome)
@@ -97,6 +105,15 @@ public class DockerCodingEvaluator {
             delete(output);
             delete(directory);
         }
+    }
+
+    private static boolean hasBoundaryFence(String source) {
+        var lines = source.strip().lines().toList();
+        return startsFence(lines.getFirst()) || startsFence(lines.getLast().stripLeading());
+    }
+
+    private static boolean startsFence(String line) {
+        return line.startsWith("```") || line.startsWith("~~~");
     }
 
     private static void removeContainers(Task task, String runId) {

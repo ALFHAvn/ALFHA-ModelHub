@@ -20,7 +20,13 @@ public class BenchmarkController {
     }
     @PostMapping
     public ResponseEntity<BenchmarkReport> run(@RequestBody BenchmarkRequest request) {
-        var report = service.run(request);
+        return created(service.run(request));
+    }
+    @PostMapping("/java-coding/strict-raw")
+    public ResponseEntity<BenchmarkReport> runStrictRaw(@RequestBody BenchmarkRequest request) {
+        return created(service.runStrictRaw(request));
+    }
+    private ResponseEntity<BenchmarkReport> created(BenchmarkReport report) {
         return ResponseEntity.created(URI.create("/api/benchmarks/" + report.id())).body(report);
     }
     @GetMapping("/{id}")

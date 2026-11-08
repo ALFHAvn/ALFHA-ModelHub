@@ -84,7 +84,13 @@ public class GenerationService {
 
     OllamaProvider requireOllama(String model) {
         if (providers.apply(model) instanceof OllamaProvider ollama) return ollama;
-        throw new IllegalArgumentException("JSON generation requires an Ollama model");
+        throw new IllegalArgumentException("This mode requires an Ollama model");
+    }
+
+    GenerateResponse generateInstalledRaw(GenerateRequest input) {
+        validate(input);
+        var ollama = requireOllama(input.model());
+        return execute(input, () -> ollama.generateInstalledRaw(input.model(), input.prompt()), response -> true);
     }
 
     GenerateResponse generateDefectIds(GenerateRequest input) {

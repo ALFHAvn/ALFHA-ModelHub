@@ -33,6 +33,12 @@ class BenchmarkIT {
             var localAnswer = new java.util.concurrent.atomic.AtomicReference<>("42");
             var localStatus = new java.util.concurrent.atomic.AtomicInteger(200);
             var mapper = new ObjectMapper();
+            stub.createContext("/api/tags", exchange -> {
+                byte[] bytes = "{\"models\":[{\"name\":\"qwen3:4b\"}]}".getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, bytes.length);
+                exchange.getResponseBody().write(bytes);
+                exchange.close();
+            });
             stub.createContext("/", exchange -> {
                 calls.incrementAndGet();
                 boolean cloud = exchange.getRequestURI().getPath().equals("/chat");
@@ -287,6 +293,48 @@ class BenchmarkIT {
                             Long.class, local.path("execution").path("requestId").asString()));
                     assertEquals(codingReport, mapper.readTree(get(client,
                             base(restarted) + codingResponse.headers().firstValue("Location").orElseThrow()).body()));
+                    String base = base(restarted);
+                    int callsBeforeStrict = calls.get();
+                    assertEquals(400, coding(client, base, true, "qwen3:4b", "vendor/model:free").statusCode());
+                    assertEquals(callsBeforeStrict, calls.get());
+                    var strictValid = coding(client, base, true, "qwen3:4b");
+                    assertEquals(201, strictValid.statusCode(), strictValid.body());
+                    var validReport = mapper.readTree(strictValid.body());
+                    assertEquals("java-coding-raw-v1", validReport.path("scoringVersion").asString());
+                    assertEquals(codingReport.path("datasetSha256"), validReport.path("datasetSha256"));
+                    var strictEvaluation = validReport.path("results").path(0).path("codingEvaluation");
+                    assertEquals(local.path("codingEvaluation").path("outcome"), strictEvaluation.path("outcome"));
+                    assertEquals(local.path("codingEvaluation").path("sourceSha256"), strictEvaluation.path("sourceSha256"));
+                    assertEquals(realCodingRunner ? 6 : 0, strictEvaluation.path("cases").size());
+
+                    String fenced = "```java\r\n" + localAnswer.get() + "```\r\n";
+                    localAnswer.set(fenced);
+                    var rejected = coding(client, base, true, "qwen3:4b");
+                    assertEquals(201, rejected.statusCode(), rejected.body());
+                    var rejectedReport = mapper.readTree(rejected.body());
+                    var rejectedResult = rejectedReport.path("results").path(0);
+                    assertEquals("FAIL", rejectedResult.path("score").asString());
+                    assertEquals("SUCCESS", rejectedResult.path("execution").path("status").asString());
+                    assertEquals(fenced, rejectedResult.path("execution").path("response").asString());
+                    var rejectedEvaluation = rejectedResult.path("codingEvaluation");
+                    assertEquals("FORMAT_ERROR", rejectedEvaluation.path("outcome").asString());
+                    assertEquals(64, rejectedEvaluation.path("sourceSha256").asString().length());
+                    assertTrue(rejectedEvaluation.path("imageId").isNull());
+                    assertEquals(0, rejectedEvaluation.path("cases").size());
+                    assertEquals(rejectedReport, mapper.readTree(get(client,
+                            base + rejected.headers().firstValue("Location").orElseThrow()).body()));
+
+                    localStatus.set(500);
+                    try {
+                        var failure = coding(client, base, true, "qwen3:4b");
+                        assertEquals(201, failure.statusCode(), failure.body());
+                        var failedResult = mapper.readTree(failure.body()).path("results").path(0);
+                        assertEquals("NOT_SCORED", failedResult.path("score").asString());
+                        assertEquals("PROVIDER_ERROR", failedResult.path("execution").path("error").path("code").asString());
+                        assertFalse(failedResult.has("codingEvaluation"));
+                    } finally {
+                        localStatus.set(200);
+                    }
                     if (realCodingRunner) {
                         localAnswer.set("public class Main { invalid source }");
                         var invalid = coding(client, base(restarted));
@@ -309,11 +357,15 @@ class BenchmarkIT {
         return client.send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(10)).GET().build(), HttpResponse.BodyHandlers.ofString());
     }
     private HttpResponse<String> coding(HttpClient client, String base) throws Exception {
-        return client.send(HttpRequest.newBuilder(URI.create(base + "/api/benchmarks"))
+        return coding(client, base, false, "qwen3:4b", "vendor/model:free");
+    }
+    private HttpResponse<String> coding(HttpClient client, String base, boolean strictRaw, String... models) throws Exception {
+        String path = strictRaw ? "/api/benchmarks/java-coding/strict-raw" : "/api/benchmarks";
+        String payload = new ObjectMapper().writeValueAsString(java.util.Map.of(
+                "datasetId", "java-coding", "datasetVersion", "1", "models", models));
+        return client.send(HttpRequest.newBuilder(URI.create(base + path))
                 .timeout(Duration.ofSeconds(110)).header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("""
-                        {"datasetId":"java-coding","datasetVersion":"1","models":["qwen3:4b","vendor/model:free"]}
-                        """)).build(), HttpResponse.BodyHandlers.ofString());
+                .POST(HttpRequest.BodyPublishers.ofString(payload)).build(), HttpResponse.BodyHandlers.ofString());
     }
     private HttpResponse<String> routed(HttpClient client, String base, String profile, String prompt) throws Exception {
         String body = new ObjectMapper().writeValueAsString(java.util.Map.of("profile", profile, "prompt", prompt));

@@ -36,6 +36,12 @@ public class BenchmarkService {
         this.deployment = deployment;
     }
     public BenchmarkReport run(BenchmarkRequest request) {
+        return run(request, false);
+    }
+    public BenchmarkReport runStrictRaw(BenchmarkRequest request) {
+        return run(request, true);
+    }
+    private BenchmarkReport run(BenchmarkRequest request, boolean strictRaw) {
         if (request == null || request.models() == null
                 || request.models().isEmpty() || request.models().size() > 2 || request.models().stream().anyMatch(Objects::isNull)
                 || new HashSet<>(request.models()).size() != request.models().size()
@@ -44,8 +50,13 @@ public class BenchmarkService {
         var selected = List.copyOf(request.models());
         var dataset = catalog.dataset(request.datasetId(), request.datasetVersion());
         boolean coding = dataset.tasks().stream().anyMatch(task -> task.rule() == BenchmarkDataset.Rule.JAVA_CODING);
+        if (strictRaw && (!"java-coding".equals(dataset.id()) || request.schedule() != null))
+            throw new IllegalArgumentException("Strict raw evaluation requires the Java coding dataset and local models");
         if (coding && !codingEvaluator.enabled()) throw new CodingDisabledException();
-        for (String model : selected) generation.validate(new GenerateRequest(model, "validation"));
+        for (String model : selected) {
+            generation.validate(new GenerateRequest(model, "validation"));
+            if (strictRaw) generation.requireOllama(model);
+        }
         if (repository == null) throw new IllegalStateException("Benchmark persistence is required");
         if (!slot.tryAcquire()) throw new BusyException();
         try {
@@ -62,12 +73,13 @@ public class BenchmarkService {
             var skippedCloudTasks = new ArrayList<String>();
             for (var task : dataset.tasks()) {
                 List<List<GenerateResponse>> executions;
-                if (cloudScheduler == null && selected.size() == 2) {
+                if (!strictRaw && cloudScheduler == null && selected.size() == 2) {
                     executions = comparison.compare(new CompareRequest(selected, task.prompt())).results()
                             .stream().map(List::of).toList();
                 } else {
                     var jobs = configs.stream().<java.util.function.Supplier<List<GenerateResponse>>>map(config -> () -> {
                         var input = new GenerateRequest(config.model(), task.prompt());
+                        if (strictRaw) return List.of(generation.generateInstalledRaw(input));
                         if (cloudScheduler != null && "openrouter".equals(config.provider()))
                             return cloudScheduler.execute(() -> generation.generate(input));
                         return List.of(generation.generate(input));
@@ -85,7 +97,7 @@ public class BenchmarkService {
                     String score = "NOT_SCORED";
                     if ("SUCCESS".equals(execution.status())) {
                         if (task.rule() == BenchmarkDataset.Rule.JAVA_CODING) {
-                            evaluation = codingEvaluator.evaluate(task, dataset.version(), execution.response());
+                            evaluation = codingEvaluator.evaluate(task, dataset.version(), execution.response(), strictRaw);
                             score = switch (evaluation.outcome()) {
                                 case PASS -> "PASS";
                                 case INFRASTRUCTURE_ERROR -> "NOT_SCORED";
@@ -98,8 +110,9 @@ public class BenchmarkService {
                     results.add(new Result(task.id(), execution, score, attempts, evaluation));
                 }
             }
+            String scoringVersion = strictRaw ? "java-coding-raw-v1" : coding ? "java-coding-v1" : "objective-v1";
             var report = new BenchmarkReport(UUID.randomUUID(), started, Instant.now(),
-                    catalog.hash(dataset.id(), dataset.version()), coding ? "java-coding-v1" : "objective-v1",
+                    catalog.hash(dataset.id(), dataset.version()), scoringVersion,
                     dataset, configs, List.copyOf(results), selected.stream().map(model -> summarize(model, results)).toList(),
                     request.schedule(), skippedCloudTasks, deployment.id());
             repository.save(report);
