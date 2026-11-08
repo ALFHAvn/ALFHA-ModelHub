@@ -20,8 +20,11 @@ class HistoryIT {
             var stub = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
             stub.createContext("/", exchange -> {
                 boolean cloud = exchange.getRequestURI().getPath().equals("/chat");
-                byte[] bytes = (cloud ? "private-upstream-secret" : "{\"response\":\"Hello\",\"done\":true}").getBytes(StandardCharsets.UTF_8);
-                exchange.sendResponseHeaders(cloud ? 500 : 200, bytes.length);
+                boolean reviewer = new ObjectMapper().readTree(exchange.getRequestBody().readAllBytes())
+                        .path("model").asString().equals("local-reviewer");
+                boolean fail = cloud || reviewer;
+                byte[] bytes = (fail ? "private-upstream-secret" : "{\"response\":\"Hello\",\"done\":true}").getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(fail ? 500 : 200, bytes.length);
                 exchange.getResponseBody().write(bytes);
                 exchange.close();
             });
@@ -30,9 +33,10 @@ class HistoryIT {
             String[] args = {"--server.port=0", "--spring.autoconfigure.exclude=", "--modelhub.history.enabled=true",
                     "--spring.datasource.url=" + postgres.getJdbcUrl(), "--spring.datasource.username=" + postgres.getUsername(),
                     "--spring.datasource.password=" + postgres.getPassword(), "--modelhub.ollama.model=qwen3:4b",
-                    "--modelhub.ollama.base-url=" + origin, "--modelhub.openrouter.enabled=true",
+                    "--modelhub.ollama.base-url=" + origin, "--modelhub.ollama.secondary-model=local-reviewer", "--modelhub.openrouter.enabled=true",
                     "--modelhub.openrouter.model=vendor/model:free", "--modelhub.openrouter.api-key=test-secret-key",
                     "--modelhub.openrouter.endpoint=" + origin + "/chat"};
+            String workflowPayload = "{\"proposerModel\":\"qwen3:4b\",\"reviewerModel\":\"local-reviewer\",\"prompt\":\"Workflow task\"}";
             try {
                 try (var context = new SpringApplicationBuilder(ModelHubApplication.class).run(args);
                      var client = HttpClient.newHttpClient()) {
@@ -70,17 +74,39 @@ class HistoryIT {
                     }
                     var empty = client.send(HttpRequest.newBuilder(URI.create(base + "/api/runs?page=10&size=20")).GET().build(), HttpResponse.BodyHandlers.ofString());
                     assertEquals(0, mapper.readTree(empty.body()).path("content").size());
+                    var workflow = client.send(post(base + "/api/workflows/proposal-review", workflowPayload), HttpResponse.BodyHandlers.ofString());
+                    assertEquals(200, workflow.statusCode(), workflow.body());
+                    var steps = mapper.readTree(workflow.body());
+                    assertEquals("SUCCESS", steps.path("proposal").path("status").asString());
+                    assertEquals("PROVIDER_ERROR", steps.path("review").path("error").path("code").asString());
+                    var page = client.send(HttpRequest.newBuilder(URI.create(base + "/api/runs?size=2")).GET().build(), HttpResponse.BodyHandlers.ofString());
+                    var history = mapper.readTree(page.body()).path("content");
+                    for (var role : new String[] {"proposal", "review"}) {
+                        var step = steps.path(role);
+                        var saved = history.valueStream().filter(row -> row.path("requestId").equals(step.path("requestId")))
+                                .findFirst().orElseThrow();
+                        for (var field : new String[] {"model", "response", "durationMs", "status", "error"})
+                            assertEquals(step.path(field), saved.path(field), field);
+                        assertTrue(saved.path("prompt").asString().contains("Workflow task"));
+                        if (role.equals("review")) assertTrue(saved.path("prompt").asString().contains("Hello"));
+                    }
                     // Simulate storage failure only inside the disposable test database.
                     jdbc.execute("ALTER TABLE execution_runs RENAME TO temporarily_unavailable_runs");
                     var failedSave = client.send(post(base + "/api/generate", "{\"model\":\"qwen3:4b\",\"prompt\":\"Hi\"}"), HttpResponse.BodyHandlers.ofString());
                     assertEquals(503, failedSave.statusCode());
                     assertEquals("Hello", mapper.readTree(failedSave.body()).path("response").asString());
                     assertTrue(failedSave.body().contains("HISTORY_UNAVAILABLE"));
+                    var workflowFailedSave = client.send(post(base + "/api/workflows/proposal-review", workflowPayload), HttpResponse.BodyHandlers.ofString());
+                    assertEquals(200, workflowFailedSave.statusCode(), workflowFailedSave.body());
+                    var unavailable = mapper.readTree(workflowFailedSave.body());
+                    assertEquals("HISTORY_UNAVAILABLE", unavailable.path("proposal").path("error").path("code").asString());
+                    assertEquals("Hello", unavailable.path("proposal").path("response").asString());
+                    assertEquals("SKIPPED", unavailable.path("review").path("status").asString());
                     jdbc.execute("ALTER TABLE temporarily_unavailable_runs RENAME TO execution_runs");
                 }
                 // Restart verifies durable history and that Flyway does not recreate existing rows.
                 try (var restarted = new SpringApplicationBuilder(ModelHubApplication.class).run(args)) {
-                    assertEquals(3L, restarted.getBean(JdbcTemplate.class).queryForObject("SELECT count(*) FROM execution_runs", Long.class));
+                    assertEquals(5L, restarted.getBean(JdbcTemplate.class).queryForObject("SELECT count(*) FROM execution_runs", Long.class));
                 }
             } finally { stub.stop(0); }
         }

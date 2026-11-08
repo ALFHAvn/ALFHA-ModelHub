@@ -18,9 +18,13 @@ models. It is independent of ALFHA Agent.
   [Routing design](docs/routing-design.md)
 - Milestone 10 covers benchmark coverage and repeatability.
   [Evaluation protocol](docs/benchmark-repeatability.md)
+- A two-model workflow generates a proposal and then collects feedback from an
+  explicitly selected reviewer. [Proposal and review](#two-model-proposal-and-review)
 
-`v0.2.0` is planned for the completion of Milestone 10. Each completed
-milestone after 10 will receive its own versioned release.
+[v0.2.0](https://github.com/ALFHAvn/ALFHA-ModelHub/releases/tag/v0.2.0) is the
+published Milestone 10 release. Proposal and review is part of Milestone 11
+development. Each completed milestone after 10 will receive its own versioned
+release.
 
 Docker Compose and GitHub Actions are included. The validation notes describe
 which behaviors have been exercised with live providers. [Validation](docs/validation.md)
@@ -157,6 +161,7 @@ The application never downloads models automatically.
 | --- | --- | --- |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Trusted Ollama server origin |
 | `OLLAMA_MODEL` | `qwen3:4b` | Configured local model identifier |
+| `OLLAMA_SECONDARY_MODEL` | Empty | Optional second installed Ollama model for explicit selection |
 | `OLLAMA_TIMEOUT` | `120s` | Positive connection and complete request timeout |
 
 ```powershell
@@ -272,6 +277,46 @@ either can finish. Other tests cover failures/timeouts in either position, both
 failures, input rejection before provider calls, result ordering, and real HTTP
 requests against local Ollama/OpenRouter stubs. Real two-provider comparison was
 subsequently verified separately during release acceptance.
+
+## Two-model proposal and review
+
+`POST /api/workflows/proposal-review` accepts a prompt and two distinct model
+IDs from `GET /api/models`. To run both steps locally, set `OLLAMA_MODEL` and
+`OLLAMA_SECONDARY_MODEL` to two different models already installed in Ollama.
+Set these in `.env` for Docker Compose or in the backend process environment
+for a direct launch, then restart the backend. The second local model is
+available for explicit selection. Automatic routing keeps its existing
+candidate set.
+
+```powershell
+$body = @{
+  proposerModel = 'qwen2.5-coder:3b-instruct-q4_K_M'
+  reviewerModel = 'qwen2.5-coder:7b-instruct-q4_K_M'
+  prompt = 'Propose a Java API for an in-memory cache with bounded size.'
+} | ConvertTo-Json
+Invoke-RestMethod http://127.0.0.1:8080/api/workflows/proposal-review -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 300
+```
+
+The reviewer receives the original task and proposal. Its response is feedback.
+Both steps return a model ID, response, `requestId`, `durationMs`, `status`,
+and `error`. HTTP 200 returns the outcomes of a valid request, including step
+failures. Invalid inputs return HTTP 400 before either model runs. A failed
+review still returns the proposal. A failed or blank proposal, or a combined
+review prompt over 32,000 characters, yields a `SKIPPED` review with a reason
+and no execution ID. A history write failure retains any generated response
+and reports `HISTORY_UNAVAILABLE` for that step.
+
+Each attempted step is saved independently in [execution history](#execution-history)
+using its execution ID. The API response groups the two roles for the caller.
+The workflow only exchanges text and makes at most two sequential generation
+calls. It has no tools for running code or acting on feedback.
+
+Cloud steps require OpenRouter to be configured and `allowCloud: true` in the
+request. Only a fixed `:free` model on the official endpoint is eligible. The
+workflow applies zero-price limits and disables provider fallback. Selecting a
+cloud reviewer sends the original prompt and the proposal to OpenRouter.
+
+[Objective evaluation plan](docs/proposal-review-evaluation.md)
 
 ## Execution history
 

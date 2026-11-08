@@ -65,7 +65,7 @@ public class RoutingPreview {
             for (String id : tokens) unique.add(UUID.fromString(id.strip()));
         }
         reportIds = List.copyOf(unique);
-        candidates = registry.models().stream().map(model -> new Candidate(model.model(), model.provider(),
+        candidates = registry.routingModels().stream().map(model -> new Candidate(model.model(), model.provider(),
                 "ollama".equals(model.provider()) ? localTimeout : cloudTimeout)).toList();
     }
 
