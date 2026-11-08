@@ -101,6 +101,37 @@ The diagnostic covers one model pairing and one attempt per fixture. A
 follow-up should include more independent examples and a same-model review
 control before attributing any effect to the second model.
 
+## Follow-up fixtures and same-model control
+
+The [v2 fixture set](../benchmarks/proposal-review/defect-identification-v2.json)
+contains six new tasks. Java covers decimal equality, caller-owned state, and
+map updates. SQL covers NULL handling in an anti-join, subquery correlation,
+and UTC time boundaries. Each language has two defective examples and one
+clean control. The v1 collector and scorer remain the defaults.
+
+```powershell
+./scripts/collect-proposal-review-pilot.ps1 -DatasetVersion 2 -IncludeSelfReview `
+  -ProposerModel qwen2.5-coder:3b-instruct-q4_K_M `
+  -ReviewerModel qwen2.5-coder:7b-instruct-q4_K_M
+```
+
+For each fixture, the original proposal is the one-call baseline. After the
+cross-model review, the collector submits the exact saved review prompt to
+the proposer through the existing local generation API. Both reviewers get
+the same task and proposal. The control gets its own execution ID, timing,
+raw response, and verified history row. If the cross-model review was
+skipped, the summary still records that the control was requested and the
+task has no control response. `reviewVsSelfReview` compares the two reviewers
+on strict exact-set scoring when both produce a response. Failed calls
+remain unavailable for correctness scoring.
+
+One v2 batch makes at most 18 sequential local calls. Before collection,
+record model builds and runtime settings, freeze the call budget, and decide
+whether a separate offline format diagnostic will be reported. The cross-model
+review always runs first because its saved prompt is reused by the control.
+This fixes the input while leaving possible order and warm-up effects. The
+tests use simulated responses. No v2 model results have been collected.
+
 ## Paired evaluation protocol
 
 Start with a local, paired evaluation of defect identification. Freeze a

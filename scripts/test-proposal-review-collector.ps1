@@ -17,6 +17,22 @@ function Invoke-WebRequest($Uri, $TimeoutSec, $MaximumRedirection, [switch]$NoPr
     if ($Uri.EndsWith('/api/runs?size=100')) {
         return @{ Content = (@{ content = $mock.rows } | ConvertTo-Json -Depth 6) }
     }
+    if ($Uri.EndsWith('/api/generate') -and $Method -ceq 'Post') {
+        $controlRequest = $Body | ConvertFrom-Json -DateKind String
+        if ($mock.mode -cne 'control' -or $controlRequest.model -cne 'first' -or
+            $controlRequest.prompt -cne $mock.rows[1].prompt) { throw 'Invalid same-model control request.' }
+        $mock.controlPosts++
+        $step = @{ model = 'first'; requestId = [guid]::NewGuid(); response = '{"defectIds":["A"]}';
+            durationMs = 12; status = 'SUCCESS'; error = $null }
+        if ($mock.controlPosts -eq 2) {
+            $step.status = 'FAILED'
+            $step.response = $null
+            $step.error = @{ code = 'TIMEOUT'; message = 'Test timeout' }
+        }
+        $mock.rows += $step + @{ prompt = $controlRequest.prompt; timestamp = [datetimeoffset]::UtcNow.ToString('o') }
+        $step | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $OutFile
+        return @{ StatusCode = if ($step.error) { 504 } else { 200 } }
+    }
     if (-not $Uri.EndsWith('/api/workflows/proposal-review') -or $Method -ne 'Post') { throw "Unexpected request: $Uri" }
     $request = $Body | ConvertFrom-Json
     if ($request.allowCloud -ne $false -or $request.proposerModel -cne 'first' -or $request.reviewerModel -cne 'second') {
@@ -39,7 +55,7 @@ function Invoke-WebRequest($Uri, $TimeoutSec, $MaximumRedirection, [switch]$NoPr
         }
     }
     if ($mock.mode -ceq 'duplicate') { $proposal.requestId = $mock.reusedId }
-    if ($mock.mode -ceq 'skipped') {
+    if ($mock.mode -cin 'skipped', 'control-skipped') {
         $proposal.status = 'FAILED'
         $proposal.error = @{ code = 'TIMEOUT'; message = 'Test timeout' }
         $proposal.response = $null
@@ -56,15 +72,16 @@ function Invoke-WebRequest($Uri, $TimeoutSec, $MaximumRedirection, [switch]$NoPr
     $savedReview = $review + @{ prompt = $reviewPrompt; timestamp = [datetimeoffset]::UtcNow.ToString('o') }
     if ($mock.mode -ceq 'response') { $savedReview.response += ' altered' }
     $mock.rows = @($savedProposal)
-    if ($mock.mode -cnotin 'skipped', 'missing') { $mock.rows += $savedReview }
+    if ($mock.mode -cnotin 'skipped', 'control-skipped', 'missing') { $mock.rows += $savedReview }
     @{ proposal = $proposal; review = $review } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $OutFile
     @{ StatusCode = 200 }
 }
 
 try {
-    foreach ($mode in @('valid', 'skipped', 'cloud', 'missing', 'prompt', 'context', 'response', 'duplicate', 'diagnostic')) {
+    foreach ($mode in @('valid', 'skipped', 'cloud', 'missing', 'prompt', 'context', 'response', 'duplicate', 'diagnostic', 'control', 'control-skipped')) {
         $mock.mode = $mode
         $mock.posts = 0
+        $mock.controlPosts = 0
         $expectedError = switch ($mode) {
             'cloud' { 'Expected a configured Ollama model:*' }
             'missing' { 'Expected exactly one history row*' }
@@ -74,13 +91,23 @@ try {
             'duplicate' { 'Duplicate execution ID:*' }
         }
         try {
-            $file = & $collector -ProposerModel first -ReviewerModel second
+            $options = if ($mode -cin 'control', 'control-skipped') { @{ DatasetVersion = '2'; IncludeSelfReview = $true } } else { @{} }
+            $file = & $collector -ProposerModel first -ReviewerModel second @options
             if ($expectedError) { throw "Collector accepted $mode evidence." }
             $summary = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
-            $expectedComparison = if ($mode -ceq 'skipped') { 'UNAVAILABLE' } else { 'TIE' }
-            if ($mock.posts -ne 4 -or $summary.tasks.Count -ne 4 -or
+            $expectedComparison = if ($mode -cin 'skipped', 'control-skipped') { 'UNAVAILABLE' } else { 'TIE' }
+            $taskCount = if ($options.IncludeSelfReview) { 6 } else { 4 }
+            if ($mock.posts -ne $taskCount -or $summary.tasks.Count -ne $taskCount -or
                 @($summary.tasks | Where-Object { $_.score.comparison -cne $expectedComparison }).Count) {
                 throw "Wrong collection result for $mode ($($mock.posts) dispatches, $($summary.tasks.Count) tasks, $($summary.tasks.score.comparison -join ','))."
+            }
+            if ($mode -ceq 'control' -and ($mock.controlPosts -ne 6 -or -not $summary.selfReviewRequested -or
+                $summary.tasks[0].score.datasetVersion -cne '2' -or $summary.tasks[0].score.reviewVsSelfReview -cne 'REGRESSED' -or
+                $summary.tasks[1].score.reviewVsSelfReview -cne 'UNAVAILABLE' -or $summary.tasks[1].score.selfReview.errorCode -cne 'TIMEOUT')) {
+                throw 'Incorrect same-model control scores.'
+            }
+            if ($mode -ceq 'control-skipped' -and ($mock.controlPosts -ne 0 -or -not $summary.selfReviewRequested)) {
+                throw 'A skipped review dispatched a control.'
             }
             if ($mode -ceq 'diagnostic') {
                 $replay = Join-Path $PSScriptRoot 'replay-proposal-review-json-fences.ps1'

@@ -1,11 +1,13 @@
 #Requires -Version 7.5
 param(
     [Parameter(Mandatory)][string]$TaskId,
-    [string]$WorkflowPath
+    [string]$WorkflowPath,
+    [ValidateSet('1', '2')][string]$DatasetVersion = '1',
+    [string]$SelfReviewPath
 )
 
 $ErrorActionPreference = 'Stop'
-$fixturePath = Join-Path $PSScriptRoot '../benchmarks/proposal-review/defect-identification-v1.json'
+$fixturePath = Join-Path $PSScriptRoot "../benchmarks/proposal-review/defect-identification-v$DatasetVersion.json"
 $fixtureText = [IO.File]::ReadAllText($fixturePath).Replace("`r`n", "`n")
 $fixture = ConvertFrom-Json -InputObject $fixtureText -AsHashtable
 $tasks = @($fixture.tasks | Where-Object id -CEQ $TaskId)
@@ -87,6 +89,9 @@ function Read-Step($Step, [bool]$CanSkip) {
 
 $findings = $allowed | ForEach-Object { "$_`: $($task.findings[$_])" }
 $prompt = @($task.task, "$($task.language) source:", $task.code, 'Candidate findings:', ($findings -join "`n"), $fixture.outputContract) -join "`n`n"
+if ($SelfReviewPath -and (-not $WorkflowPath -or $DatasetVersion -cne '2')) {
+    throw 'A same-model control requires a v2 workflow.'
+}
 if (-not $WorkflowPath) { return $prompt }
 
 $workflowBytes = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $WorkflowPath).ProviderPath)
@@ -99,16 +104,18 @@ if ($proposal.model -ceq $review.model -or $proposal.requestId -eq $review.reque
     throw 'Invalid proposal and review pairing.'
 }
 
-$comparison = if ($proposal.score.outcome -ceq 'UNAVAILABLE' -or $review.score.outcome -ceq 'UNAVAILABLE') { 'UNAVAILABLE' }
-elseif ($proposal.score.outcome -cne 'PASS' -and $review.score.outcome -ceq 'PASS') { 'IMPROVED' }
-elseif ($proposal.score.outcome -ceq 'PASS' -and $review.score.outcome -cne 'PASS') { 'REGRESSED' }
-else { 'TIE' }
+function Compare-Outcome([string]$Baseline, [string]$Candidate) {
+    if ($Baseline -ceq 'UNAVAILABLE' -or $Candidate -ceq 'UNAVAILABLE') { return 'UNAVAILABLE' }
+    if ($Baseline -cne 'PASS' -and $Candidate -ceq 'PASS') { return 'IMPROVED' }
+    if ($Baseline -ceq 'PASS' -and $Candidate -cne 'PASS') { return 'REGRESSED' }
+    'TIE'
+}
 
 function Get-Sha256([string]$Text) {
     [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($Text))).ToLowerInvariant()
 }
 
-[ordered]@{
+$report = [ordered]@{
     datasetId = $fixture.id
     datasetVersion = $fixture.version
     datasetSha256 = Get-Sha256 $fixtureText
@@ -117,5 +124,16 @@ function Get-Sha256([string]$Text) {
     workflowSha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($workflowBytes)).ToLowerInvariant()
     proposal = $proposal
     review = $review
-    comparison = $comparison
-} | ConvertTo-Json -Depth 6
+    comparison = Compare-Outcome $proposal.score.outcome $review.score.outcome
+}
+if ($SelfReviewPath) {
+    $controlBytes = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $SelfReviewPath).ProviderPath)
+    $controlText = [Text.UTF8Encoding]::new($false, $true).GetString($controlBytes).TrimStart([char]0xFEFF)
+    $control = Read-Step (ConvertFrom-Json -InputObject $controlText -AsHashtable -DateKind String) $false
+    if ($control.model -cne $proposal.model -or $control.requestId -in $proposal.requestId, $review.requestId -or
+        $review.status -ceq 'SKIPPED') { throw 'Invalid same-model control pairing.' }
+    $report.selfReviewSha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($controlBytes)).ToLowerInvariant()
+    $report.selfReview = $control
+    $report.reviewVsSelfReview = Compare-Outcome $control.score.outcome $review.score.outcome
+}
+$report | ConvertTo-Json -Depth 6

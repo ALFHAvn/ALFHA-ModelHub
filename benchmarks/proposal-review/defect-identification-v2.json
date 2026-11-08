@@ -1,0 +1,79 @@
+{
+  "id": "proposal-review-defect-identification",
+  "version": "2",
+  "outputContract": "For either an initial assessment or a review, report the complete set of applicable candidate finding IDs. Return only a JSON object with one field, defectIds, containing an array of unique IDs from the candidate list. Use an empty array if none apply. Array order does not matter.",
+  "tasks": [
+    {
+      "id": "java-decimal-threshold",
+      "language": "java",
+      "task": "Given non-null BigDecimal values, accept an amount if its numeric value is at least the threshold, regardless of scale. Identify defects.",
+      "code": "static boolean meetsThreshold(BigDecimal amount, BigDecimal threshold) {\n    return amount.compareTo(threshold) > 0 || amount.equals(threshold);\n}",
+      "findings": {
+        "A": "An amount of 10.00 can be rejected against a threshold of 10.0.",
+        "B": "An amount below the threshold can be accepted because equals compares scale only.",
+        "C": "An amount above the threshold is rejected if the two scales differ."
+      },
+      "expectedDefectIds": ["A"]
+    },
+    {
+      "id": "java-input-mutation",
+      "language": "java",
+      "task": "Return the largest value in a nonempty, mutable list of non-null integers. The caller's list must retain its original order. Identify defects.",
+      "code": "static int largest(List<Integer> values) {\n    values.sort(Comparator.naturalOrder());\n    return values.get(0);\n}",
+      "findings": {
+        "A": "The function can reorder the caller's list.",
+        "B": "The function reads the minimum after sorting in ascending order.",
+        "C": "Duplicate values cause the sort to throw."
+      },
+      "expectedDefectIds": ["A", "B"]
+    },
+    {
+      "id": "java-first-value-clean",
+      "language": "java",
+      "task": "In single-threaded code, remember the first value for each key in an initially empty HashMap. All keys and values are non-null. Identify defects.",
+      "code": "static void remember(HashMap<String, String> values, String key, String value) {\n    values.putIfAbsent(key, value);\n}",
+      "findings": {
+        "A": "A later call replaces the first value for an existing key.",
+        "B": "Equal strings in different objects are stored as separate keys.",
+        "C": "A second distinct key erases the first key's mapping."
+      },
+      "expectedDefectIds": []
+    },
+    {
+      "id": "sql-null-antijoin",
+      "language": "sql",
+      "task": "In PostgreSQL, accounts.id is a primary key. blocked.account_id can be NULL, and NULL does not block any account. Return the ID of each unblocked account. Identify defects.",
+      "code": "SELECT id FROM accounts\nWHERE id NOT IN (SELECT account_id FROM blocked);",
+      "findings": {
+        "A": "A NULL in blocked can suppress accounts with no matching block.",
+        "B": "Duplicate block rows duplicate unblocked account IDs in the output.",
+        "C": "An empty blocked table filters out every account."
+      },
+      "expectedDefectIds": ["A"]
+    },
+    {
+      "id": "sql-uncorrelated-exists",
+      "language": "sql",
+      "task": "In PostgreSQL, customers.id is a primary key and orders.customer_id references it. Return each customer ID with at least one paid order of their own. Identify defects.",
+      "code": "SELECT c.id FROM customers AS c\nWHERE EXISTS (SELECT 1 FROM orders AS o WHERE o.status = 'paid');",
+      "findings": {
+        "A": "The query can include a customer whose only orders are unpaid.",
+        "B": "Several paid orders cause duplicate IDs in the result.",
+        "C": "If there are no paid orders, the query includes every customer."
+      },
+      "expectedDefectIds": ["A"]
+    },
+    {
+      "id": "sql-half-open-range-clean",
+      "language": "sql",
+      "task": "In PostgreSQL, events.occurred_at is timestamptz. Return the IDs of events that occurred in January 2026 UTC. Exclude NULL timestamps. Identify defects.",
+      "code": "SELECT id FROM events\nWHERE occurred_at >= TIMESTAMPTZ '2026-01-01 00:00:00+00'\n  AND occurred_at < TIMESTAMPTZ '2026-02-01 00:00:00+00';",
+      "findings": {
+        "A": "The query includes the first instant of February UTC.",
+        "B": "The query excludes midnight at the start of January UTC.",
+        "C": "The query includes rows with NULL timestamps."
+      },
+      "expectedDefectIds": []
+    }
+  ]
+}
