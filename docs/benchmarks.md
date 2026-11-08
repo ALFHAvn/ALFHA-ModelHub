@@ -459,8 +459,29 @@ reused retries, with `INVALID_COHORT`. A missing report returns `NOT_FOUND`.
 Use one cohort per compatible set. Matching metadata describes the saved
 configuration. Model weights or settings that were never pinned remain
 unknown, and repeats of a task remain repeats. The totals are descriptive.
-The next operational step is to make compatible reports easier to find and
-to show how format, sandbox, and execution outcomes change over time.
+
+##### Find compatible reports
+
+`GET /api/benchmarks/{id}/coding-peers` uses an existing Java report as the
+seed. The `limit` parameter controls the number of peers from 1 to 19 and
+defaults to 19. The response includes the seed ID first, followed by the
+selected peers in newest-first order. The whole `reportIds` array can be
+passed to the cohort endpoint.
+
+```powershell
+$base = 'http://127.0.0.1:8080/api/benchmarks'
+$seedId = '<saved-java-report-id>'
+$selection = Invoke-RestMethod "$base/$seedId/coding-peers?limit=5"
+$body = @{ reportIds = $selection.reportIds } | ConvertTo-Json
+Invoke-RestMethod "$base/coding-cohort" -Method Post -ContentType 'application/json' -Body $body
+```
+
+Discovery checks up to 100 recent reports with matching stored metadata.
+It skips a candidate if adding it would reuse an execution or make the set
+incompatible. `candidatesChecked` counts the reports examined in that
+window. `windowLimited` is true if the window ended before the requested
+peer count was reached and older candidates exist. This read-only search
+uses one saved report as its starting point and makes zero model calls.
 
 The public fixtures measure behavior on six inputs, so hard-coded answers can
 pass. The coding benchmark is synchronous and limited to a single Java source

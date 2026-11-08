@@ -372,11 +372,23 @@ class BenchmarkIT {
                     assertEquals(envelopeReport, mapper.readTree(get(client,
                             base + envelope.headers().firstValue("Location").orElseThrow()).body()));
 
+                    String firstId = rejectedReport.path("id").asString();
+                    String secondId = boundaryReport.path("id").asString();
+                    var repeated = ((ObjectNode) rejectedReport).deepCopy();
+                    var repeatedId = java.util.UUID.randomUUID();
+                    repeated.put("id", repeatedId.toString());
+                    repeated.put("completedAt", "2099-01-01T00:00:00Z");
+                    jdbc.update("INSERT INTO benchmark_reports(id, report) VALUES (?, ?::jsonb)", repeatedId, mapper.writeValueAsString(repeated));
+                    var otherDeployment = ((ObjectNode) rejectedReport).deepCopy();
+                    var otherDeploymentId = java.util.UUID.randomUUID();
+                    otherDeployment.put("id", otherDeploymentId.toString());
+                    otherDeployment.put("deploymentId", "other-test-deployment");
+                    otherDeployment.put("completedAt", "2099-01-02T00:00:00Z");
+                    jdbc.update("INSERT INTO benchmark_reports(id, report) VALUES (?, ?::jsonb)",
+                            otherDeploymentId, mapper.writeValueAsString(otherDeployment));
                     int callsBeforeCohort = calls.get();
                     long reportsBeforeCohort = jdbc.queryForObject("SELECT count(*) FROM benchmark_reports", Long.class);
                     long executionsBeforeCohort = jdbc.queryForObject("SELECT count(*) FROM execution_runs", Long.class);
-                    String firstId = rejectedReport.path("id").asString();
-                    String secondId = boundaryReport.path("id").asString();
                     var cohortResponse = cohort(client, base, secondId, firstId);
                     assertEquals(200, cohortResponse.statusCode(), cohortResponse.body());
                     var cohort = mapper.readTree(cohortResponse.body());
@@ -404,6 +416,21 @@ class BenchmarkIT {
                         assertEquals("INVALID_COHORT", mapper.readTree(invalidCohort.body()).path("code").asString());
                     }
                     assertEquals(404, cohort(client, base, java.util.UUID.randomUUID().toString()).statusCode());
+                    String peersPath = base + "/api/benchmarks/" + firstId + "/coding-peers";
+                    var peersResponse = get(client, peersPath + "?limit=1");
+                    assertEquals(200, peersResponse.statusCode(), peersResponse.body());
+                    var peers = mapper.readTree(peersResponse.body());
+                    assertEquals(firstId, peers.path("seedReportId").asString());
+                    assertEquals(mapper.readTree(mapper.writeValueAsString(java.util.List.of(firstId, secondId))), peers.path("reportIds"));
+                    assertEquals(2, peers.path("candidatesChecked").asInt(-1));
+                    assertFalse(peers.path("windowLimited").asBoolean(true));
+                    var discovered = cohort(client, base, peers.path("reportIds").get(0).asString(), peers.path("reportIds").get(1).asString());
+                    assertEquals(200, discovered.statusCode(), discovered.body());
+                    assertEquals(cohort, mapper.readTree(discovered.body()));
+                    assertEquals(400, get(client, peersPath + "?limit=0").statusCode());
+                    assertEquals(400, get(client, peersPath + "?limit=20").statusCode());
+                    assertEquals(400, get(client, base + reportPath + "/coding-peers").statusCode());
+                    assertEquals(404, get(client, base + "/api/benchmarks/" + java.util.UUID.randomUUID() + "/coding-peers").statusCode());
                     assertEquals(callsBeforeCohort, calls.get());
                     assertEquals(reportsBeforeCohort, jdbc.queryForObject("SELECT count(*) FROM benchmark_reports", Long.class));
                     assertEquals(executionsBeforeCohort, jdbc.queryForObject("SELECT count(*) FROM execution_runs", Long.class));

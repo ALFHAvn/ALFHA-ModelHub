@@ -34,6 +34,10 @@ public class BenchmarkController {
     public CodingBenchmarkCohort codingCohort(@RequestBody CodingBenchmarkCohort.Request request) {
         return service.codingCohort(request.reportIds());
     }
+    @GetMapping("/{id}/coding-peers")
+    public CodingBenchmarkCohort.Discovery codingPeers(@PathVariable UUID id, @RequestParam(defaultValue = "19") int limit) {
+        return service.codingPeers(id, limit);
+    }
     private ResponseEntity<BenchmarkReport> created(BenchmarkReport report) {
         return ResponseEntity.created(URI.create("/api/benchmarks/" + report.id())).body(report);
     }

@@ -13,6 +13,8 @@ import vn.alfha.modelhub.repository.BenchmarkRepository;
 
 @Service
 public class BenchmarkService {
+    private static final int MAX_COHORT_REPORTS = 20;
+    private static final int PEER_SEARCH_WINDOW = 100;
     private final BenchmarkCatalog catalog;
     private final GenerationService generation;
     private final ComparisonService comparison;
@@ -157,14 +159,53 @@ public class BenchmarkService {
     }
 
     public CodingBenchmarkCohort codingCohort(List<UUID> reportIds) {
-        if (reportIds == null || reportIds.isEmpty() || reportIds.size() > 20 || reportIds.stream().anyMatch(Objects::isNull)
+        if (reportIds == null || reportIds.isEmpty() || reportIds.size() > MAX_COHORT_REPORTS || reportIds.stream().anyMatch(Objects::isNull)
                 || new HashSet<>(reportIds).size() != reportIds.size())
             throw new InvalidCohortException("Choose 1 to 20 distinct benchmark report IDs");
-        var reports = reportIds.stream().map(id -> {
-            var report = find(id);
-            if (!id.equals(report.id())) throw new InvalidCohortException("Stored report identity does not match its ID");
-            return report;
-        }).sorted(Comparator.comparing(BenchmarkReport::completedAt).thenComparing(BenchmarkReport::id)).toList();
+        var reports = reportIds.stream().map(this::findCohortReport)
+                .sorted(Comparator.comparing(BenchmarkReport::completedAt).thenComparing(BenchmarkReport::id)).toList();
+        var grader = validateCodingCohort(reports);
+        var first = reports.getFirst();
+        var rows = reports.stream().flatMap(report -> report.results().stream()).toList();
+        boolean strictRaw = !RawJavaFormat.STANDARD.scoringVersion.equals(first.scoringVersion());
+        var models = first.models().stream().map(config -> {
+            var modelRuns = rows.stream().filter(row -> config.model().equals(row.execution().model())).toList();
+            return new CodingBenchmarkCohort.Model(config, modelRuns.size(), summarizeCoding(modelRuns, strictRaw));
+        }).toList();
+        var references = reports.stream().map(report -> new CodingBenchmarkCohort.Run(report.id(), report.completedAt())).toList();
+        return new CodingBenchmarkCohort(first.dataset().id(), first.dataset().version(), first.datasetSha256(),
+                first.scoringVersion(), first.deploymentId(), first.schedule(), grader, references, models);
+    }
+
+    public CodingBenchmarkCohort.Discovery codingPeers(UUID id, int limit) {
+        if (limit < 1 || limit >= MAX_COHORT_REPORTS)
+            throw new InvalidCohortException("Peer limit must be between 1 and 19");
+        var seed = findCohortReport(id);
+        var accepted = new ArrayList<>(List.of(seed));
+        validateCodingCohort(accepted);
+        var candidates = repository.findCodingPeerCandidates(seed, PEER_SEARCH_WINDOW + 1);
+        int checked = 0;
+        for (var candidate : candidates) {
+            if (checked == PEER_SEARCH_WINDOW || accepted.size() > limit) break;
+            checked++;
+            accepted.add(candidate);
+            try {
+                validateCodingCohort(accepted);
+            } catch (InvalidCohortException e) {
+                accepted.removeLast();
+            }
+        }
+        return new CodingBenchmarkCohort.Discovery(id, accepted.stream().map(BenchmarkReport::id).toList(),
+                checked, checked == PEER_SEARCH_WINDOW && candidates.size() > PEER_SEARCH_WINDOW && accepted.size() <= limit);
+    }
+
+    private BenchmarkReport findCohortReport(UUID id) {
+        var report = find(id);
+        if (!id.equals(report.id())) throw new InvalidCohortException("Stored report identity does not match its ID");
+        return report;
+    }
+
+    private static CodingBenchmarkCohort.Grader validateCodingCohort(List<BenchmarkReport> reports) {
         var first = reports.getFirst();
         if (!"java-coding".equals(first.dataset().id()) || Arrays.stream(RawJavaFormat.values())
                 .noneMatch(format -> format.scoringVersion.equals(first.scoringVersion())))
@@ -175,27 +216,20 @@ public class BenchmarkService {
                 || !Objects.equals(first.deploymentId(), report.deploymentId())))
             throw new InvalidCohortException("Reports must share the dataset snapshot, scoring version, model configuration, schedule, and deployment");
 
-        var rows = reports.stream().flatMap(report -> report.results().stream()).toList();
         var executionIds = new HashSet<UUID>();
         var graders = new HashSet<CodingBenchmarkCohort.Grader>();
-        for (var row : rows) {
-            if (row.attempts().isEmpty() || !row.attempts().getLast().equals(row.execution())
-                    || row.attempts().stream().anyMatch(attempt -> attempt.requestId() == null || !executionIds.add(attempt.requestId())))
-                throw new InvalidCohortException("Reports contain missing or reused execution IDs");
-            var grade = row.codingEvaluation();
-            if (grade != null && !grade.cases().isEmpty())
-                graders.add(new CodingBenchmarkCohort.Grader(grade.imageId(), grade.timeoutSeconds()));
+        for (var report : reports) {
+            for (var row : report.results()) {
+                if (row.attempts().isEmpty() || !row.attempts().getLast().equals(row.execution())
+                        || row.attempts().stream().anyMatch(attempt -> attempt.requestId() == null || !executionIds.add(attempt.requestId())))
+                    throw new InvalidCohortException("Reports contain missing or reused execution IDs");
+                var grade = row.codingEvaluation();
+                if (grade != null && !grade.cases().isEmpty())
+                    graders.add(new CodingBenchmarkCohort.Grader(grade.imageId(), grade.timeoutSeconds()));
+            }
         }
         if (graders.size() > 1) throw new InvalidCohortException("Reports use different grader images or timeouts");
-
-        boolean strictRaw = !RawJavaFormat.STANDARD.scoringVersion.equals(first.scoringVersion());
-        var models = first.models().stream().map(config -> {
-            var modelRuns = rows.stream().filter(row -> config.model().equals(row.execution().model())).toList();
-            return new CodingBenchmarkCohort.Model(config, modelRuns.size(), summarizeCoding(modelRuns, strictRaw));
-        }).toList();
-        var references = reports.stream().map(report -> new CodingBenchmarkCohort.Run(report.id(), report.completedAt())).toList();
-        return new CodingBenchmarkCohort(first.dataset().id(), first.dataset().version(), first.datasetSha256(),
-                first.scoringVersion(), first.deploymentId(), first.schedule(), graders.stream().findFirst().orElse(null), references, models);
+        return graders.stream().findFirst().orElse(null);
     }
 
     public BenchmarkReport find(UUID id) {
