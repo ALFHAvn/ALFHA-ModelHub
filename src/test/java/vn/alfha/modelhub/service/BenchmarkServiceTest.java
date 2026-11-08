@@ -11,6 +11,10 @@ import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import tools.jackson.databind.ObjectMapper;
 import vn.alfha.modelhub.dto.*;
 import vn.alfha.modelhub.dto.BenchmarkReport.Result;
+import vn.alfha.modelhub.dto.CodingBenchmarkCohort.Failure;
+import vn.alfha.modelhub.dto.CodingBenchmarkCohort.FormatValidation;
+import vn.alfha.modelhub.dto.CodingBenchmarkCohort.Stage;
+import vn.alfha.modelhub.dto.CodingBenchmarkCohort.TimelineEntry;
 import vn.alfha.modelhub.dto.CodingEvaluation.Outcome;
 import vn.alfha.modelhub.provider.*;
 import vn.alfha.modelhub.exception.ProviderException;
@@ -107,19 +111,115 @@ class BenchmarkServiceTest {
         assertEquals("Reports contain missing or reused execution IDs",
                 assertThrows(BenchmarkService.InvalidCohortException.class,
                         () -> service.codingCohort(List.of(baseline, repeatedRetry))).getMessage());
+        var original = saved.get(baseline);
+        UUID duplicateTerminal = saveCodingReport(UUID.randomUUID(), Instant.EPOCH, original.scoringVersion(),
+                original.models().getFirst().timeout(), original.results());
+        assertThrows(BenchmarkService.InvalidCohortException.class,
+                () -> service.codingCohort(List.of(baseline, duplicateTerminal)));
+    }
+
+    @Test void ordersTimelineByReportCompletionThenStableIdentifiers() throws Exception {
+        var service = service((model, prompt) -> fail("Cohort must be read-only"), (model, prompt) -> fail("Cohort must be read-only"));
+        var firstId = new UUID(0, 3);
+        var secondId = new UUID(0, 1);
+        var thirdId = new UUID(0, 2);
+        var retry = new GenerateResponse("qwen3:4b", null, 10, "FAILED", new ApiError("TIMEOUT", "timed out"));
+        var terminal = new GenerateResponse(new UUID(0, 30), "qwen3:4b", "source", 9, "SUCCESS", null);
+        var grade = new CodingEvaluation(Outcome.PASS, "source-hash", "image-a", 8, 12, List.of());
+        saveCodingReport(firstId, Instant.EPOCH, "java-coding-v1", "120s", List.of(codingRow(90, "task-z", Outcome.PASS)));
+        saveCodingReport(secondId, Instant.EPOCH.plusSeconds(1), "java-coding-v1", "120s", List.of(
+                codingRow(10, "task-b", Outcome.PASS), new Result("task-a", terminal, "PASS", List.of(retry, terminal), grade),
+                codingRow(20, "task-a", Outcome.PASS)));
+        saveCodingReport(thirdId, Instant.EPOCH.plusSeconds(1), "java-coding-v1", "120s", List.of(codingRow(5, "task-a", Outcome.PASS)));
+
+        var cohort = service.codingCohort(List.of(thirdId, secondId, firstId));
+        assertEquals(cohort, service.codingCohort(List.of(secondId, firstId, thirdId)));
+        assertEquals(List.of(firstId, secondId, secondId, secondId, thirdId),
+                cohort.timeline().stream().map(TimelineEntry::reportId).toList());
+        assertEquals(List.of(90L, 20L, 30L, 10L, 5L),
+                cohort.timeline().stream().map(row -> row.executionId().getLeastSignificantBits()).toList());
+        var row = cohort.timeline().get(2);
+        assertEquals(Instant.EPOCH.plusSeconds(1), row.completedAt());
+        assertEquals("qwen3:4b", row.model());
+        assertEquals("task-a", row.taskId());
+        assertEquals("SUCCESS", row.executionStatus());
+        assertEquals(9L, row.executionDurationMs());
+        assertEquals(12L, row.gradingDurationMs());
+        assertEquals(8, row.sandboxTimeoutSeconds());
+        assertEquals(FormatValidation.NOT_CHECKED, row.formatValidation());
+        assertNull(row.error());
+        assertEquals(5, cohort.models().getFirst().attempted());
+    }
+
+    @Test void classifiesSavedOutcomesAndKeepsMissingEvidenceVisible() throws Exception {
+        var service = service((model, prompt) -> fail("Cohort must be read-only"), (model, prompt) -> fail("Cohort must be read-only"));
+        var rows = new ArrayList<Result>();
+        for (Outcome outcome : Outcome.values()) rows.add(codingRow(outcome.ordinal(), "task", outcome));
+        var provider = new GenerateResponse("qwen3:4b", null, 4, "FAILED", new ApiError("TIMEOUT", "timed out"));
+        var history = new GenerateResponse("qwen3:4b", null, 5, "FAILED", new ApiError("HISTORY_UNAVAILABLE", "failed"));
+        var missingError = new GenerateResponse("qwen3:4b", null, 0, "FAILED", null);
+        var missingGrade = new GenerateResponse("qwen3:4b", "source", 6, "SUCCESS", null);
+        for (var execution : List.of(provider, history, missingError, missingGrade))
+            rows.add(new Result("task", execution, "NOT_SCORED", null, null));
+        var reportId = saveCodingReport(UUID.randomUUID(), Instant.EPOCH, "java-coding-raw-v2", "120s", rows);
+        var timeline = service.codingCohort(List.of(reportId)).timeline();
+        var byId = new HashMap<UUID, TimelineEntry>();
+        timeline.forEach(row -> byId.put(row.executionId(), row));
+        assertEquals(rows.size(), byId.size());
+        for (Outcome verdict : List.of(Outcome.PASS, Outcome.WRONG_ANSWER, Outcome.COMPILATION_ERROR,
+                Outcome.EXECUTION_ERROR, Outcome.TIMEOUT, Outcome.OUTPUT_LIMIT)) {
+            var row = byId.get(new UUID(0, verdict.ordinal()));
+            assertEquals(verdict, row.sandboxVerdict());
+            assertEquals(FormatValidation.PASSED, row.formatValidation());
+            assertEquals(verdict == Outcome.PASS ? null : new Failure(Stage.SANDBOX, verdict.name()), row.error());
+        }
+        var rejected = byId.get(new UUID(0, Outcome.FORMAT_ERROR.ordinal()));
+        assertEquals(FormatValidation.REJECTED, rejected.formatValidation());
+        assertEquals(new Failure(Stage.FORMAT, "FORMAT_ERROR"), rejected.error());
+        assertNull(rejected.sandboxVerdict());
+        assertNull(rejected.sandboxTimeoutSeconds());
+        assertEquals(7L, rejected.gradingDurationMs());
+        var invalid = byId.get(new UUID(0, Outcome.INVALID_SUBMISSION.ordinal()));
+        assertEquals(FormatValidation.NOT_CHECKED, invalid.formatValidation());
+        assertEquals(new Failure(Stage.SUBMISSION, "INVALID_SUBMISSION"), invalid.error());
+        assertNull(invalid.sandboxVerdict());
+        var infra = byId.get(new UUID(0, Outcome.INFRASTRUCTURE_ERROR.ordinal()));
+        assertEquals(FormatValidation.PASSED, infra.formatValidation());
+        assertEquals(new Failure(Stage.GRADER, "INFRASTRUCTURE_ERROR"), infra.error());
+        assertNull(infra.sandboxVerdict());
+        assertEquals(new Failure(Stage.PROVIDER, "TIMEOUT"), byId.get(provider.requestId()).error());
+        assertEquals(new Failure(Stage.HISTORY, "HISTORY_UNAVAILABLE"), byId.get(history.requestId()).error());
+        assertEquals(new Failure(Stage.GENERATION, null), byId.get(missingError.requestId()).error());
+        assertEquals(new Failure(Stage.GRADER, "MISSING_EVALUATION"), byId.get(missingGrade.requestId()).error());
+        for (var execution : List.of(provider, history, missingError, missingGrade)) {
+            var row = byId.get(execution.requestId());
+            assertEquals(FormatValidation.NOT_CHECKED, row.formatValidation());
+            assertNull(row.sandboxVerdict());
+            assertNull(row.gradingDurationMs());
+            assertNull(row.sandboxTimeoutSeconds());
+        }
+    }
+
+    private static Result codingRow(long id, String task, Outcome outcome) {
+        var execution = new GenerateResponse(new UUID(0, id), "qwen3:4b", "source", 4, "SUCCESS", null);
+        return new Result(task, execution, outcome == Outcome.PASS ? "PASS" : "FAIL", null,
+                new CodingEvaluation(outcome, null, null, null, 7, List.of()));
     }
 
     private UUID saveCodingFixture(String timeout, String image, GenerateResponse retry) throws Exception {
-        var catalog = new BenchmarkCatalog(mapper);
-        var dataset = catalog.dataset("java-coding", "1");
         var result = new GenerateResponse("qwen3:4b", "source", 1, "SUCCESS", null);
         var grade = new CodingEvaluation(Outcome.PASS, "source-hash", image, 8, 1,
                 List.of(new CodingEvaluation.CaseResult("ascending", Outcome.PASS, 1)));
-        UUID id = UUID.randomUUID();
-        saved.put(id, new BenchmarkReport(id, Instant.EPOCH, Instant.EPOCH, catalog.hash("java-coding", "1"),
-                "java-coding-raw-v2", dataset, List.of(new BenchmarkReport.ModelConfig("qwen3:4b", "ollama", timeout, "defaults")),
-                List.of(new Result("median-of-three", result, "PASS", retry == null ? List.of(result) : List.of(retry, result), grade)),
-                List.of(), null, List.of(), "test-deployment"));
+        var row = new Result("median-of-three", result, "PASS", retry == null ? List.of(result) : List.of(retry, result), grade);
+        return saveCodingReport(UUID.randomUUID(), Instant.EPOCH, "java-coding-raw-v2", timeout, List.of(row));
+    }
+
+    private UUID saveCodingReport(UUID id, Instant completedAt, String scoringVersion, String timeout, List<Result> rows) throws Exception {
+        var catalog = new BenchmarkCatalog(mapper);
+        saved.put(id, new BenchmarkReport(id, Instant.EPOCH, completedAt, catalog.hash("java-coding", "1"),
+                scoringVersion, catalog.dataset("java-coding", "1"),
+                List.of(new BenchmarkReport.ModelConfig("qwen3:4b", "ollama", timeout, "defaults")),
+                rows, List.of(), null, List.of(), "test-deployment"));
         return id;
     }
     @Test void allFailuresHaveNoSuccessLatencyOrConditionalPassRate() throws Exception {

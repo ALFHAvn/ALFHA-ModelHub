@@ -398,6 +398,30 @@ class BenchmarkIT {
                     assertEquals(2, cohort.path("reports").size());
                     assertEquals(firstId, cohort.path("reports").path(0).path("id").asString());
                     assertEquals(secondId, cohort.path("reports").path(1).path("id").asString());
+                    var timeline = cohort.path("timeline");
+                    assertEquals(2, timeline.size());
+                    var rejectedEntry = timeline.path(0);
+                    assertEquals(firstId, rejectedEntry.path("reportId").asString());
+                    assertEquals(rejectedReport.path("completedAt"), rejectedEntry.path("completedAt"));
+                    assertEquals("median-of-three", rejectedEntry.path("taskId").asString());
+                    assertEquals("qwen3:4b", rejectedEntry.path("model").asString());
+                    var originalExecution = rejectedReport.path("results").path(0).path("execution");
+                    assertEquals(originalExecution.path("requestId"), rejectedEntry.path("executionId"));
+                    assertEquals(originalExecution.path("durationMs"), rejectedEntry.path("executionDurationMs"));
+                    assertEquals("SUCCESS", rejectedEntry.path("executionStatus").asString());
+                    assertEquals("REJECTED", rejectedEntry.path("formatValidation").asString());
+                    assertEquals(mapper.readTree("{\"stage\":\"FORMAT\",\"code\":\"FORMAT_ERROR\"}"), rejectedEntry.path("error"));
+                    assertTrue(rejectedEntry.path("sandboxVerdict").isNull());
+                    var boundaryEntry = timeline.path(1);
+                    assertEquals(secondId, boundaryEntry.path("reportId").asString());
+                    assertEquals("PASSED", boundaryEntry.path("formatValidation").asString());
+                    var boundaryGrade = boundaryReport.path("results").path(0).path("codingEvaluation");
+                    assertEquals(boundaryGrade.path("durationMs"), boundaryEntry.path("gradingDurationMs"));
+                    assertEquals(boundaryGrade.path("timeoutSeconds"), boundaryEntry.path("sandboxTimeoutSeconds"));
+                    assertEquals(realCodingRunner ? "SANDBOX" : "GRADER", boundaryEntry.path("error").path("stage").asString());
+                    assertEquals(boundaryGrade.path("outcome"), boundaryEntry.path("error").path("code"));
+                    if (realCodingRunner) assertEquals("COMPILATION_ERROR", boundaryEntry.path("sandboxVerdict").asString());
+                    else assertTrue(boundaryEntry.path("sandboxVerdict").isNull());
                     var aggregate = cohort.path("models").path(0);
                     assertEquals(2, aggregate.path("attempted").asInt());
                     assertEquals(mapper.readTree("{\"checked\":2,\"rejected\":1}"), aggregate.path("coding").path("rawFormat"));
@@ -408,9 +432,19 @@ class BenchmarkIT {
                         assertEquals(boundaryReport.path("results").path(0).path("codingEvaluation").path("imageId"),
                                 cohort.path("grader").path("imageId"));
                     } else assertTrue(cohort.path("grader").isNull());
-                    assertEquals(200, cohort(client, base, legacyId.toString()).statusCode());
+                    var legacyCohort = cohort(client, base, legacyId.toString());
+                    assertEquals(200, legacyCohort.statusCode());
+                    var legacyTimeline = mapper.readTree(legacyCohort.body()).path("timeline");
+                    assertEquals(2, legacyTimeline.size());
+                    var cloudEntry = legacyTimeline.path(1);
+                    assertEquals(cloud.path("execution").path("requestId"), cloudEntry.path("executionId"));
+                    assertEquals("NOT_CHECKED", cloudEntry.path("formatValidation").asString());
+                    assertEquals(mapper.readTree("{\"stage\":\"PROVIDER\",\"code\":\"PROVIDER_ERROR\"}"), cloudEntry.path("error"));
+                    assertTrue(cloudEntry.path("sandboxVerdict").isNull());
+                    assertTrue(cloudEntry.path("gradingDurationMs").isNull());
                     for (String[] ids : new String[][] { {firstId, firstId}, {firstId, envelopeReport.path("id").asString()},
-                            {firstId, validReport.path("id").asString()}, {legacyId.toString(), codingReport.path("id").asString()} }) {
+                            {firstId, validReport.path("id").asString()}, {legacyId.toString(), codingReport.path("id").asString()},
+                            {firstId, repeatedId.toString()} }) {
                         var invalidCohort = cohort(client, base, ids);
                         assertEquals(400, invalidCohort.statusCode(), invalidCohort.body());
                         assertEquals("INVALID_COHORT", mapper.readTree(invalidCohort.body()).path("code").asString());

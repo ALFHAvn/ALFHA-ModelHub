@@ -9,6 +9,10 @@ import org.springframework.stereotype.Service;
 import vn.alfha.modelhub.dto.*;
 import vn.alfha.modelhub.dto.BenchmarkReport.*;
 import vn.alfha.modelhub.dto.CodingEvaluation.Outcome;
+import vn.alfha.modelhub.dto.CodingBenchmarkCohort.Failure;
+import vn.alfha.modelhub.dto.CodingBenchmarkCohort.FormatValidation;
+import vn.alfha.modelhub.dto.CodingBenchmarkCohort.Stage;
+import vn.alfha.modelhub.dto.CodingBenchmarkCohort.TimelineEntry;
 import vn.alfha.modelhub.repository.BenchmarkRepository;
 
 @Service
@@ -173,8 +177,52 @@ public class BenchmarkService {
             return new CodingBenchmarkCohort.Model(config, modelRuns.size(), summarizeCoding(modelRuns, strictRaw));
         }).toList();
         var references = reports.stream().map(report -> new CodingBenchmarkCohort.Run(report.id(), report.completedAt())).toList();
+        var timeline = reports.stream().flatMap(report -> report.results().stream()
+                .sorted(Comparator.comparing((Result row) -> row.execution().model()).thenComparing(Result::taskId)
+                        .thenComparing(row -> row.execution().requestId()))
+                .map(row -> timelineEntry(report, row, strictRaw))).toList();
         return new CodingBenchmarkCohort(first.dataset().id(), first.dataset().version(), first.datasetSha256(),
-                first.scoringVersion(), first.deploymentId(), first.schedule(), grader, references, models);
+                first.scoringVersion(), first.deploymentId(), first.schedule(), grader, references, models, timeline);
+    }
+
+    private static TimelineEntry timelineEntry(BenchmarkReport report, Result row, boolean strictRaw) {
+        var execution = row.execution();
+        var grade = row.codingEvaluation();
+        Outcome outcome = grade == null ? null : grade.outcome();
+        FormatValidation format = FormatValidation.NOT_CHECKED;
+        Outcome verdict = null;
+        Failure error;
+        if (outcome == null) {
+            error = ungradedFailure(execution);
+        } else {
+            if (strictRaw && outcome != Outcome.INVALID_SUBMISSION)
+                format = outcome == Outcome.FORMAT_ERROR ? FormatValidation.REJECTED : FormatValidation.PASSED;
+            error = switch (outcome) {
+                case INVALID_SUBMISSION -> new Failure(Stage.SUBMISSION, outcome.name());
+                case FORMAT_ERROR -> new Failure(Stage.FORMAT, outcome.name());
+                case INFRASTRUCTURE_ERROR -> new Failure(Stage.GRADER, outcome.name());
+                case PASS -> null;
+                default -> new Failure(Stage.SANDBOX, outcome.name());
+            };
+            if (error == null || error.stage() == Stage.SANDBOX) verdict = outcome;
+        }
+        return new TimelineEntry(report.id(), report.completedAt(), row.taskId(), execution.model(), execution.requestId(),
+                execution.status(), format, verdict, error, execution.durationMs(),
+                grade == null ? null : grade.durationMs(), grade == null ? null : grade.timeoutSeconds());
+    }
+
+    private static Failure ungradedFailure(GenerateResponse execution) {
+        if (execution.error() == null && "SUCCESS".equals(execution.status()))
+            return new Failure(Stage.GRADER, "MISSING_EVALUATION");
+        String code = execution.error() == null ? null : execution.error().code();
+        Stage stage = switch (code) {
+            case "TIMEOUT", "RATE_LIMITED", "PROVIDER_ERROR", "INVALID_PROVIDER_RESPONSE",
+                    "CONNECTION_FAILURE", "CONFIGURATION_ERROR", "INTERRUPTED" -> Stage.PROVIDER;
+            case "HISTORY_UNAVAILABLE" -> Stage.HISTORY;
+            case "OUTPUT_FORMAT_ERROR" -> Stage.FORMAT;
+            case null, default -> Stage.GENERATION;
+        };
+        return new Failure(stage, code);
     }
 
     public CodingBenchmarkCohort.Discovery codingPeers(UUID id, int limit) {

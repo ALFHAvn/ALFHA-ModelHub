@@ -436,7 +436,7 @@ Historical reports and objective benchmark summaries omit the new object.
 
 #### Compare saved coding runs
 
-Milestone 12B starts with a read-only cohort summary. Send one to twenty
+Milestone 12B provides a read-only cohort summary. Send one to twenty
 distinct saved Java report IDs to `POST /api/benchmarks/coding-cohort`.
 
 ```json
@@ -445,9 +445,37 @@ distinct saved Java report IDs to `POST /api/benchmarks/coding-cohort`.
 
 The response gives the dataset version and hash, scoring version, model
 configuration, and per-model totals for the [coding metrics](#coding-report-breakdown).
-Report references are ordered by completion time. The endpoint calculates
-metrics from saved terminal results, so historical coding reports can be
-included. A request reads PostgreSQL and makes zero model calls.
+The endpoint calculates metrics and the `timeline` from saved terminal
+results, so historical coding reports can be included. A request reads
+PostgreSQL and makes zero model calls or writes.
+
+The `timeline` has one row per saved task and model result. Each row has
+`reportId`, `completedAt`, `taskId`, `model`, `executionId`, and the saved
+`executionStatus`. The order is ascending report completion time, then
+report UUID (Java UUID natural order). Within a report, rows are ordered by
+model ID, task ID, and execution UUID. Each row uses its report's completion
+time because reports lack individual execution timestamps. Retries are
+available in the original report and do not get separate timeline rows.
+
+- `formatValidation` is `PASSED` or `REJECTED` when the saved outcome
+  establishes what the strict raw Java check decided. `NOT_CHECKED` covers
+  standard scoring, unavailable generation or grade data, and submissions
+  rejected before the check. A format pass can still be followed by a grader
+  failure or a failed sandbox verdict.
+- `sandboxVerdict` records the saved sandbox outcome, such as `PASS`,
+  `COMPILATION_ERROR`, `EXECUTION_ERROR`, or `WRONG_ANSWER`. It is null
+  when no sandbox verdict is available.
+- `error` identifies the failure stage and saved code. For example, a
+  provider `TIMEOUT` has stage `PROVIDER` and a sandbox `TIMEOUT` has
+  stage `SANDBOX`. Other stages include `FORMAT`, `GRADER`, `SUBMISSION`,
+  `HISTORY`, and `GENERATION`. A successful generation with no recorded
+  grade shows `GRADER` / `MISSING_EVALUATION`. A failed execution without a
+  saved code uses a null code.
+- `executionDurationMs` measures the terminal generation attempt.
+  `gradingDurationMs` measures the saved evaluation, which may have ended
+  before Docker ran. `sandboxTimeoutSeconds` is the saved per-case limit.
+  Grading duration and timeout are null when the corresponding data is
+  unavailable.
 
 Reports must share the exact dataset snapshot and hash, scoring version,
 ordered model configuration, schedule, and deployment ID. Verified sandbox
