@@ -372,6 +372,42 @@ class BenchmarkIT {
                     assertEquals(envelopeReport, mapper.readTree(get(client,
                             base + envelope.headers().firstValue("Location").orElseThrow()).body()));
 
+                    int callsBeforeCohort = calls.get();
+                    long reportsBeforeCohort = jdbc.queryForObject("SELECT count(*) FROM benchmark_reports", Long.class);
+                    long executionsBeforeCohort = jdbc.queryForObject("SELECT count(*) FROM execution_runs", Long.class);
+                    String firstId = rejectedReport.path("id").asString();
+                    String secondId = boundaryReport.path("id").asString();
+                    var cohortResponse = cohort(client, base, secondId, firstId);
+                    assertEquals(200, cohortResponse.statusCode(), cohortResponse.body());
+                    var cohort = mapper.readTree(cohortResponse.body());
+                    assertEquals("1", cohort.path("datasetVersion").asString());
+                    assertEquals("java-coding-raw-v1", cohort.path("scoringVersion").asString());
+                    assertEquals(boundaryReport.path("datasetSha256"), cohort.path("datasetSha256"));
+                    assertEquals(2, cohort.path("reports").size());
+                    assertEquals(firstId, cohort.path("reports").path(0).path("id").asString());
+                    assertEquals(secondId, cohort.path("reports").path(1).path("id").asString());
+                    var aggregate = cohort.path("models").path(0);
+                    assertEquals(2, aggregate.path("attempted").asInt());
+                    assertEquals(mapper.readTree("{\"checked\":2,\"rejected\":1}"), aggregate.path("coding").path("rawFormat"));
+                    assertEquals(realCodingRunner ? 1 : 0, aggregate.path("coding").path("sandboxVerdicts").asInt(-1));
+                    assertEquals(realCodingRunner ? 0 : 1, aggregate.path("coding").path("graderInfrastructureFailures").asInt(-1));
+                    if (realCodingRunner) {
+                        assertEquals(1, aggregate.path("coding").path("sandboxOutcomes").path("COMPILATION_ERROR").asInt());
+                        assertEquals(boundaryReport.path("results").path(0).path("codingEvaluation").path("imageId"),
+                                cohort.path("grader").path("imageId"));
+                    } else assertTrue(cohort.path("grader").isNull());
+                    assertEquals(200, cohort(client, base, legacyId.toString()).statusCode());
+                    for (String[] ids : new String[][] { {firstId, firstId}, {firstId, envelopeReport.path("id").asString()},
+                            {firstId, validReport.path("id").asString()}, {legacyId.toString(), codingReport.path("id").asString()} }) {
+                        var invalidCohort = cohort(client, base, ids);
+                        assertEquals(400, invalidCohort.statusCode(), invalidCohort.body());
+                        assertEquals("INVALID_COHORT", mapper.readTree(invalidCohort.body()).path("code").asString());
+                    }
+                    assertEquals(404, cohort(client, base, java.util.UUID.randomUUID().toString()).statusCode());
+                    assertEquals(callsBeforeCohort, calls.get());
+                    assertEquals(reportsBeforeCohort, jdbc.queryForObject("SELECT count(*) FROM benchmark_reports", Long.class));
+                    assertEquals(executionsBeforeCohort, jdbc.queryForObject("SELECT count(*) FROM execution_runs", Long.class));
+
                     if (realCodingRunner) {
                         String rawSource = local.path("execution").path("response").asString();
                         String withTextBlock = rawSource.replace("public class Main {", "public class Main {\n"
@@ -443,6 +479,12 @@ class BenchmarkIT {
         return client.send(HttpRequest.newBuilder(URI.create(base + path))
                 .timeout(Duration.ofSeconds(110)).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(payload)).build(), HttpResponse.BodyHandlers.ofString());
+    }
+    private HttpResponse<String> cohort(HttpClient client, String base, String... ids) throws Exception {
+        String body = new ObjectMapper().writeValueAsString(java.util.Map.of("reportIds", ids));
+        return client.send(HttpRequest.newBuilder(URI.create(base + "/api/benchmarks/coding-cohort"))
+                .timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
     }
     private HttpResponse<String> routed(HttpClient client, String base, String profile, String prompt) throws Exception {
         String body = new ObjectMapper().writeValueAsString(java.util.Map.of("profile", profile, "prompt", prompt));

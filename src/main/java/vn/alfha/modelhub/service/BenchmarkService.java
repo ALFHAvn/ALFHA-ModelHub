@@ -155,6 +155,49 @@ public class BenchmarkService {
         var rawFormat = strictRaw ? new RawFormatSummary(sandboxVerdicts + infrastructure + formatRejected, formatRejected) : null;
         return new CodingSummary(sandboxVerdicts, Map.copyOf(outcomes), invalid, infrastructure, Map.copyOf(executionErrors), rawFormat);
     }
+
+    public CodingBenchmarkCohort codingCohort(List<UUID> reportIds) {
+        if (reportIds == null || reportIds.isEmpty() || reportIds.size() > 20 || reportIds.stream().anyMatch(Objects::isNull)
+                || new HashSet<>(reportIds).size() != reportIds.size())
+            throw new InvalidCohortException("Choose 1 to 20 distinct benchmark report IDs");
+        var reports = reportIds.stream().map(id -> {
+            var report = find(id);
+            if (!id.equals(report.id())) throw new InvalidCohortException("Stored report identity does not match its ID");
+            return report;
+        }).sorted(Comparator.comparing(BenchmarkReport::completedAt).thenComparing(BenchmarkReport::id)).toList();
+        var first = reports.getFirst();
+        if (!"java-coding".equals(first.dataset().id()) || Arrays.stream(RawJavaFormat.values())
+                .noneMatch(format -> format.scoringVersion.equals(first.scoringVersion())))
+            throw new InvalidCohortException("Choose saved Java coding reports");
+        if (reports.stream().anyMatch(report -> !first.dataset().equals(report.dataset())
+                || !first.datasetSha256().equals(report.datasetSha256()) || !first.scoringVersion().equals(report.scoringVersion())
+                || !first.models().equals(report.models()) || !Objects.equals(first.schedule(), report.schedule())
+                || !Objects.equals(first.deploymentId(), report.deploymentId())))
+            throw new InvalidCohortException("Reports must share the dataset snapshot, scoring version, model configuration, schedule, and deployment");
+
+        var rows = reports.stream().flatMap(report -> report.results().stream()).toList();
+        var executionIds = new HashSet<UUID>();
+        var graders = new HashSet<CodingBenchmarkCohort.Grader>();
+        for (var row : rows) {
+            if (row.attempts().isEmpty() || !row.attempts().getLast().equals(row.execution())
+                    || row.attempts().stream().anyMatch(attempt -> attempt.requestId() == null || !executionIds.add(attempt.requestId())))
+                throw new InvalidCohortException("Reports contain missing or reused execution IDs");
+            var grade = row.codingEvaluation();
+            if (grade != null && !grade.cases().isEmpty())
+                graders.add(new CodingBenchmarkCohort.Grader(grade.imageId(), grade.timeoutSeconds()));
+        }
+        if (graders.size() > 1) throw new InvalidCohortException("Reports use different grader images or timeouts");
+
+        boolean strictRaw = !RawJavaFormat.STANDARD.scoringVersion.equals(first.scoringVersion());
+        var models = first.models().stream().map(config -> {
+            var modelRuns = rows.stream().filter(row -> config.model().equals(row.execution().model())).toList();
+            return new CodingBenchmarkCohort.Model(config, modelRuns.size(), summarizeCoding(modelRuns, strictRaw));
+        }).toList();
+        var references = reports.stream().map(report -> new CodingBenchmarkCohort.Run(report.id(), report.completedAt())).toList();
+        return new CodingBenchmarkCohort(first.dataset().id(), first.dataset().version(), first.datasetSha256(),
+                first.scoringVersion(), first.deploymentId(), first.schedule(), graders.stream().findFirst().orElse(null), references, models);
+    }
+
     public BenchmarkReport find(UUID id) {
         if (repository == null) throw new IllegalStateException("Benchmark persistence is required");
         return repository.find(id).orElseThrow(MissingException::new);
@@ -162,4 +205,7 @@ public class BenchmarkService {
     public static class BusyException extends RuntimeException { }
     public static class MissingException extends RuntimeException { }
     public static class CodingDisabledException extends RuntimeException { }
+    public static class InvalidCohortException extends RuntimeException {
+        public InvalidCohortException(String message) { super(message); }
+    }
 }

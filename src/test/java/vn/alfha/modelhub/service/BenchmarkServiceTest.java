@@ -2,6 +2,7 @@ package vn.alfha.modelhub.service;
 
 import java.net.URI;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -88,6 +89,38 @@ class BenchmarkServiceTest {
         assertEquals(Map.of("RATE_LIMITED", 2, "HISTORY_UNAVAILABLE", 1), summary.executionErrors());
         assertEquals(new BenchmarkReport.RawFormatSummary(6, 1), summary.rawFormat());
         assertNull(BenchmarkService.summarizeCoding(rows, false).rawFormat());
+    }
+
+    @Test void rejectsMixedModelAndGraderSettingsAndReusedRetryEvidence() throws Exception {
+        var service = service((model, prompt) -> fail("Cohort must be read-only"), (model, prompt) -> fail("Cohort must be read-only"));
+        var retry = new GenerateResponse("qwen3:4b", null, 1, "FAILED", new ApiError("TIMEOUT", "timed out"));
+        UUID baseline = saveCodingFixture("120s", "image-a", retry);
+        UUID differentModelConfig = saveCodingFixture("60s", "image-a", null);
+        UUID differentImage = saveCodingFixture("120s", "image-b", null);
+        UUID repeatedRetry = saveCodingFixture("120s", "image-a", retry);
+        assertEquals("Reports must share the dataset snapshot, scoring version, model configuration, schedule, and deployment",
+                assertThrows(BenchmarkService.InvalidCohortException.class,
+                        () -> service.codingCohort(List.of(baseline, differentModelConfig))).getMessage());
+        assertEquals("Reports use different grader images or timeouts",
+                assertThrows(BenchmarkService.InvalidCohortException.class,
+                        () -> service.codingCohort(List.of(baseline, differentImage))).getMessage());
+        assertEquals("Reports contain missing or reused execution IDs",
+                assertThrows(BenchmarkService.InvalidCohortException.class,
+                        () -> service.codingCohort(List.of(baseline, repeatedRetry))).getMessage());
+    }
+
+    private UUID saveCodingFixture(String timeout, String image, GenerateResponse retry) throws Exception {
+        var catalog = new BenchmarkCatalog(mapper);
+        var dataset = catalog.dataset("java-coding", "1");
+        var result = new GenerateResponse("qwen3:4b", "source", 1, "SUCCESS", null);
+        var grade = new CodingEvaluation(Outcome.PASS, "source-hash", image, 8, 1,
+                List.of(new CodingEvaluation.CaseResult("ascending", Outcome.PASS, 1)));
+        UUID id = UUID.randomUUID();
+        saved.put(id, new BenchmarkReport(id, Instant.EPOCH, Instant.EPOCH, catalog.hash("java-coding", "1"),
+                "java-coding-raw-v2", dataset, List.of(new BenchmarkReport.ModelConfig("qwen3:4b", "ollama", timeout, "defaults")),
+                List.of(new Result("median-of-three", result, "PASS", retry == null ? List.of(result) : List.of(retry, result), grade)),
+                List.of(), null, List.of(), "test-deployment"));
+        return id;
     }
     @Test void allFailuresHaveNoSuccessLatencyOrConditionalPassRate() throws Exception {
         ModelProvider failure = (model, prompt) -> { throw new ProviderException("TIMEOUT", "Request timed out"); };

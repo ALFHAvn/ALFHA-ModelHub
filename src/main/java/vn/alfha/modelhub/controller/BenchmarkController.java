@@ -30,6 +30,10 @@ public class BenchmarkController {
     public ResponseEntity<BenchmarkReport> runStrictRawV2(@RequestBody BenchmarkRequest request) {
         return created(service.runStrictRawV2(request));
     }
+    @PostMapping("/coding-cohort")
+    public CodingBenchmarkCohort codingCohort(@RequestBody CodingBenchmarkCohort.Request request) {
+        return service.codingCohort(request.reportIds());
+    }
     private ResponseEntity<BenchmarkReport> created(BenchmarkReport report) {
         return ResponseEntity.created(URI.create("/api/benchmarks/" + report.id())).body(report);
     }

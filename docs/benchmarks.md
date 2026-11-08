@@ -434,6 +434,34 @@ that passed. Existing summary fields retain their earlier definitions.
 Historical reports and objective benchmark summaries omit the new object.
 [Milestone 12A evidence](structured-output-reliability.md)
 
+#### Compare saved coding runs
+
+Milestone 12B starts with a read-only cohort summary. Send one to twenty
+distinct saved Java report IDs to `POST /api/benchmarks/coding-cohort`.
+
+```json
+{"reportIds":["00000000-0000-4000-8000-000000000001","00000000-0000-4000-8000-000000000002"]}
+```
+
+The response gives the dataset version and hash, scoring version, model
+configuration, and per-model totals for the [coding metrics](#coding-report-breakdown).
+Report references are ordered by completion time. The endpoint calculates
+metrics from saved terminal results, so historical coding reports can be
+included. A request reads PostgreSQL and makes zero model calls.
+
+Reports must share the exact dataset snapshot and hash, scoring version,
+ordered model configuration, schedule, and deployment ID. Verified sandbox
+verdicts must share the grader image and timeout. Reports that only contain
+format rejections or unavailable runs can contribute without grader metadata.
+The endpoint rejects incompatible inputs and reused execution IDs, including
+reused retries, with `INVALID_COHORT`. A missing report returns `NOT_FOUND`.
+
+Use one cohort per compatible set. Matching metadata describes the saved
+configuration. Model weights or settings that were never pinned remain
+unknown, and repeats of a task remain repeats. The totals are descriptive.
+The next operational step is to make compatible reports easier to find and
+to show how format, sandbox, and execution outcomes change over time.
+
 The public fixtures measure behavior on six inputs, so hard-coded answers can
 pass. The coding benchmark is synchronous and limited to a single Java source
 file of at most 16 KiB. Container isolation relies on the Docker runtime and
