@@ -1,5 +1,35 @@
 # Proposal and review evaluation plan
 
+## Offline scoring pilot
+
+The [v1 fixture set](../benchmarks/proposal-review/defect-identification-v1.json)
+contains four examples, with one defective example and one clean control in
+each language. The scorer reads a saved workflow response for one fixture.
+It can also print the exact task prompt for a future collection run.
+
+```powershell
+./scripts/score-proposal-review.ps1 -TaskId java-positive-sum
+./scripts/score-proposal-review.ps1 -TaskId java-positive-sum -WorkflowPath ./target/saved-workflow.json
+./scripts/test-proposal-review-scoring.ps1
+```
+
+Use PowerShell 7.2 or later. A successful step passes when its raw JSON
+contains exactly the expected set of finding IDs. Order and JSON whitespace
+are immaterial. Unknown or duplicate IDs, duplicate object fields, extra
+fields, Markdown fences, and trailing text are format errors. A valid set
+with incorrect membership is a wrong answer. Failed and skipped steps
+are unavailable for correctness scoring, with the original error code retained.
+
+The report records the fixture version, hashes for the fixture, prompt, and
+saved workflow file, both execution IDs where available, per-step latency and
+findings, and the paired exact-match outcome. These hashes identify inputs.
+A later collector must verify that the saved workflow used the emitted prompt,
+bind it to history, and enforce distinct executions across all runs before
+the scores can count as measured evidence. The four examples are pilot
+fixtures for checking the scoring contract and report shape.
+
+## Paired evaluation protocol
+
 Start with a local, paired evaluation of defect identification. Freeze a
 versioned set of small Java and SQL examples with known defects and some clean
 controls. Assign stable IDs to candidate findings for each example and freeze

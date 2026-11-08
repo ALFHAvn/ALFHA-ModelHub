@@ -1,0 +1,55 @@
+{
+  "id": "proposal-review-defect-identification",
+  "version": "1",
+  "outputContract": "For either an initial assessment or a review, report the complete set of applicable candidate finding IDs. Return only a JSON object with one field, defectIds, containing an array of unique IDs from the candidate list. Use an empty array if none apply. Array order does not matter.",
+  "tasks": [
+    {
+      "id": "java-positive-sum",
+      "language": "java",
+      "task": "The function must sum strictly positive elements of a non-null int array. The mathematical sum fits in an int. Identify defects in the implementation.",
+      "code": "static int sumPositive(int[] values) {\n    int sum = 0;\n    for (int i = 0; i <= values.length; i++) {\n        if (values[i] < 0) sum += values[i];\n    }\n    return sum;\n}",
+      "findings": {
+        "A": "The loop attempts to read at index values.length.",
+        "B": "The condition selects negative elements instead of positive elements.",
+        "C": "The accumulator starts at one, so it adds an extra unit."
+      },
+      "expectedDefectIds": ["A", "B"]
+    },
+    {
+      "id": "java-prefix-clean",
+      "language": "java",
+      "task": "The function must return a new array containing the first min(limit, values.length) elements. The caller supplies a non-null array and a nonnegative limit. Identify defects in the implementation.",
+      "code": "static int[] prefix(int[] values, int limit) {\n    int size = Math.min(limit, values.length);\n    int[] result = new int[size];\n    for (int i = 0; i < size; i++) result[i] = values[i];\n    return result;\n}",
+      "findings": {
+        "A": "A limit larger than the input length causes an out-of-bounds read.",
+        "B": "A zero limit copies one element instead of returning an empty array.",
+        "C": "The returned array shares its storage with the input array."
+      },
+      "expectedDefectIds": []
+    },
+    {
+      "id": "sql-access-precedence",
+      "language": "sql",
+      "task": "In PostgreSQL, accounts has a unique non-null id and three non-null Boolean columns. Return each account ID if it is active or an admin, and is not suspended. Identify defects in the query.",
+      "code": "SELECT id\nFROM accounts\nWHERE active = TRUE OR is_admin = TRUE AND suspended = FALSE;",
+      "findings": {
+        "A": "An active suspended account can appear because AND binds more tightly than OR.",
+        "B": "An inactive admin who is not suspended is always excluded.",
+        "C": "An account that is both active and an admin appears twice."
+      },
+      "expectedDefectIds": ["A"]
+    },
+    {
+      "id": "sql-empty-category-clean",
+      "language": "sql",
+      "task": "In PostgreSQL, categories.id and products.id are primary keys and products.category_id references categories.id. Return one row per category with the number of matching products, including categories with zero products. Identify defects in the query.",
+      "code": "SELECT c.id, COUNT(p.id) AS product_count\nFROM categories AS c\nLEFT JOIN products AS p ON p.category_id = c.id\nGROUP BY c.id;",
+      "findings": {
+        "A": "Categories with no products are omitted.",
+        "B": "A category with no products receives a count of one.",
+        "C": "A category with several products produces several result rows."
+      },
+      "expectedDefectIds": []
+    }
+  ]
+}
