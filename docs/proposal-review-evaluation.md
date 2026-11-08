@@ -130,7 +130,44 @@ record model builds and runtime settings, freeze the call budget, and decide
 whether a separate offline format diagnostic will be reported. The cross-model
 review always runs first because its saved prompt is reused by the control.
 This fixes the input while leaving possible order and warm-up effects. The
-tests use simulated responses. No v2 model results have been collected.
+automated tests exercise the three-step collection with simulated responses.
+
+## Local v2 batch on 8 November 2026
+
+One batch ran all six fixtures with Qwen2.5 Coder 3B Q4_K_M as the proposer
+and same-model reviewer and 7B Q4_K_M as the cross-model reviewer. The
+collector verified 18 distinct Ollama executions against PostgreSQL history.
+Ollama was version 0.40.15. The installed model digests and the frozen
+fixture, scorer, and collector hashes matched before and after collection.
+The run used the model defaults and made zero cloud calls.
+
+| Metric | Initial proposal | Cross-model review | Same-model review |
+| --- | ---: | ---: | ---: |
+| Successful provider calls | 6/6 | 6/6 | 6/6 |
+| Strict raw passes | 0/6 | 0/6 | 0/6 |
+| Median generation latency | 231 ms | 9,555 ms | 5,986.5 ms |
+| Responses scored after fence extraction | 6 | 6 | 5 |
+| Passes after fence extraction | 2 | 1 | 1 |
+| Actual defects identified after extraction | 3 | 4 | 4 |
+| False alarms after extraction | 5 | 12 | 8 |
+
+The median elapsed time for the two-step API request was 9,795 ms. This
+excludes the separately collected same-model review. All 18 raw responses
+failed the JSON format check. Seventeen contained one eligible fenced block.
+The remaining same-model response, for the SQL correlation task, was prose
+and had no extractable JSON block. The diagnostic verified the history and
+raw scores before replay and preserved all 55 original batch files byte for
+byte. It made zero model calls.
+
+After extraction, cross-model review had five ties and one regression
+against the initial proposal. Against same-model review, it had one win, one
+loss, three ties, and one unavailable pair. The roles identify some different
+defects and report many false alarms. One attempt per fixture and the fixed
+review order limit what can be inferred about model choice.
+
+```powershell
+./scripts/replay-proposal-review-json-fences.ps1 -PilotDirectory ./target/proposal-review-pilot-4885d1b142f34b1cacbcf29021a0c7b8
+```
 
 ## Paired evaluation protocol
 

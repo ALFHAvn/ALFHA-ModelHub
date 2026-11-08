@@ -19,12 +19,12 @@ function Invoke-WebRequest($Uri, $TimeoutSec, $MaximumRedirection, [switch]$NoPr
     }
     if ($Uri.EndsWith('/api/generate') -and $Method -ceq 'Post') {
         $controlRequest = $Body | ConvertFrom-Json -DateKind String
-        if ($mock.mode -cne 'control' -or $controlRequest.model -cne 'first' -or
+        if ($mock.mode -cnotin 'control', 'control-diagnostic' -or $controlRequest.model -cne 'first' -or
             $controlRequest.prompt -cne $mock.rows[1].prompt) { throw 'Invalid same-model control request.' }
         $mock.controlPosts++
         $step = @{ model = 'first'; requestId = [guid]::NewGuid(); response = '{"defectIds":["A"]}';
             durationMs = 12; status = 'SUCCESS'; error = $null }
-        if ($mock.controlPosts -eq 2) {
+        if ($mock.mode -ceq 'control' -and $mock.controlPosts -eq 2) {
             $step.status = 'FAILED'
             $step.response = $null
             $step.error = @{ code = 'TIMEOUT'; message = 'Test timeout' }
@@ -45,6 +45,10 @@ function Invoke-WebRequest($Uri, $TimeoutSec, $MaximumRedirection, [switch]$NoPr
         durationMs = 9; status = 'SUCCESS'; error = $null }
     $review = @{ model = 'second'; requestId = [guid]::NewGuid(); response = '{"defectIds":[]}';
         durationMs = 11; status = 'SUCCESS'; error = $null }
+    if ($mock.mode -ceq 'control-diagnostic' -and $mock.posts -eq 1) {
+        $proposal.response = '```json' + "`n" + $proposal.response + "`n" + '```'
+        $review.response = '```json' + "`n" + '{"defectIds":["A"]}' + "`n" + '```'
+    }
     if ($mock.mode -ceq 'diagnostic') {
         $proposal.response = ('```json' + "`r`n" + '{"defectIds":[]}' + "`r`n" + '```')
         $review.response = switch ($mock.posts) {
@@ -78,7 +82,7 @@ function Invoke-WebRequest($Uri, $TimeoutSec, $MaximumRedirection, [switch]$NoPr
 }
 
 try {
-    foreach ($mode in @('valid', 'skipped', 'cloud', 'missing', 'prompt', 'context', 'response', 'duplicate', 'diagnostic', 'control', 'control-skipped')) {
+    foreach ($mode in @('valid', 'skipped', 'cloud', 'missing', 'prompt', 'context', 'response', 'duplicate', 'diagnostic', 'control', 'control-skipped', 'control-diagnostic')) {
         $mock.mode = $mode
         $mock.posts = 0
         $mock.controlPosts = 0
@@ -91,7 +95,7 @@ try {
             'duplicate' { 'Duplicate execution ID:*' }
         }
         try {
-            $options = if ($mode -cin 'control', 'control-skipped') { @{ DatasetVersion = '2'; IncludeSelfReview = $true } } else { @{} }
+            $options = if ($mode -clike 'control*') { @{ DatasetVersion = '2'; IncludeSelfReview = $true } } else { @{} }
             $file = & $collector -ProposerModel first -ReviewerModel second @options
             if ($expectedError) { throw "Collector accepted $mode evidence." }
             $summary = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
@@ -108,6 +112,17 @@ try {
             }
             if ($mode -ceq 'control-skipped' -and ($mock.controlPosts -ne 0 -or -not $summary.selfReviewRequested)) {
                 throw 'A skipped review dispatched a control.'
+            }
+            if ($mode -ceq 'control-diagnostic') {
+                $report = & (Join-Path $PSScriptRoot 'replay-proposal-review-json-fences.ps1') -PilotDirectory $file.DirectoryName
+                $null = $directories.Add($report.DirectoryName)
+                $diagnostic = Get-Content -LiteralPath $report.FullName -Raw | ConvertFrom-Json
+                $first = $diagnostic.tasks[0]
+                if ($diagnostic.tasks.Count -ne 6 -or $first.raw.reviewVsSelfReview -cne 'REGRESSED' -or
+                    $first.comparison -cne 'IMPROVED' -or $first.reviewVsSelfReview -cne 'TIE' -or
+                    $first.reviewExtraction -cne 'EXTRACTED' -or $first.selfReviewExtraction -cne 'RAW_JSON') {
+                    throw 'Incorrect v2 fence diagnostic scores.'
+                }
             }
             if ($mode -ceq 'diagnostic') {
                 $replay = Join-Path $PSScriptRoot 'replay-proposal-review-json-fences.ps1'
