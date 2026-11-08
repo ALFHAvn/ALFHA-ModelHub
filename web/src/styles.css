@@ -9,10 +9,10 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 280px; }
-button, select, textarea { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .62; }
-button:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, a:focus-visible {
   outline: 3px solid #4aa689;
   outline-offset: 3px;
 }
@@ -83,7 +83,7 @@ h3 { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
 .prompt-field { margin-top: 19px; }
 .select-wrap { position: relative; min-width: 0; }
 .select-wrap svg { position: absolute; right: 12px; top: 12px; pointer-events: none; width: 16px; }
-select, textarea {
+select, textarea, .field input {
   width: 100%; border: 1px solid #cbdad1; border-radius: 9px; background: #fbfdfb;
   padding: 10px 12px; color: #172b25; font-weight: 400;
 }
@@ -131,10 +131,33 @@ textarea::placeholder { color: #60736a; }
 .history-detail h3 { margin-bottom: 6px; }
 .history-detail h3:not(:first-child) { margin-top: 15px; }
 .pagination { margin: 16px 0 0; font-size: 14px; color: var(--muted); }
+.cohort-note, .cohort-model p { color: var(--muted); font-size: 14px; line-height: 1.5; margin: 0 0 12px; }
+.cohort-model p { margin: 10px 0 0; }
+.cohort-actions { justify-content: flex-end; }
+.cohort-report-list, .cohort-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.cohort-report-list li {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px;
+  border-top: 1px solid var(--border); padding: 8px 0; font-size: 14px;
+}
+.cohort-report-list label { display: flex; gap: 8px; align-items: flex-start; }
+.cohort-report-list code { display: block; overflow-wrap: anywhere; }
+.cohort-report-list a, .cohort-run a { color: var(--green); text-underline-offset: 3px; }
+.cohort-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 12px 0 0;
+}
+.cohort-stats div { background: #f4f7f5; border-radius: 8px; padding: 8px 10px; }
+.cohort-stats dt { color: var(--muted); font-size: 12px; }
+.cohort-stats dd { font-weight: 700; margin: 3px 0 0; }
+.cohort-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.cohort-filters select, .cohort-picker select { appearance: auto; padding-right: 12px; }
+.cohort-run-title, .cohort-run-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.cohort-run-title { justify-content: space-between; }
+.cohort-run-meta { margin-top: 8px; font-size: 13px; overflow-wrap: anywhere; }
+.cohort-neutral { color: var(--muted); background: #eef2ef; }
 @media (max-width: 720px) {
   .shell { grid-template-columns: minmax(0, 1fr); }
   .sidebar { gap: 12px; padding: 14px 16px 8px; }
-  .sidebar nav { display: flex; gap: 5px; }
+  .sidebar nav { display: flex; flex-wrap: wrap; gap: 5px; }
   .sidebar nav button { width: auto; padding: 8px 10px; gap: 6px; }
   .nav-label, .sidebar-footer { display: none; }
   .topbar { min-height: 50px; }

@@ -10,6 +10,7 @@ public record CodingBenchmarkCohort(String datasetId, String datasetVersion, Str
     public record Request(List<UUID> reportIds) { }
     public record Discovery(UUID seedReportId, List<UUID> reportIds, int candidatesChecked, boolean windowLimited) { }
     public record Run(UUID id, Instant completedAt) { }
+    public record SavedReport(UUID id, Instant completedAt, String datasetVersion, String scoringVersion) { }
     public record Grader(String imageId, Integer timeoutSeconds) { }
     public record Model(BenchmarkReport.ModelConfig config, int attempted, BenchmarkReport.CodingSummary coding) { }
     public record TimelineEntry(UUID reportId, Instant completedAt, String taskId, String model, UUID executionId,

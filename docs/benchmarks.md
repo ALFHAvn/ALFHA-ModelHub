@@ -436,6 +436,13 @@ Historical reports and objective benchmark summaries omit the new object.
 
 #### Compare saved coding runs
 
+In the [local web UI](../README.md#local-web-ui-on-windows-11), open **Coding
+Cohorts** to find compatible reports, compare totals, and filter the timeline.
+The report picker uses `GET /api/benchmarks/coding-reports`. It returns up to
+20 saved Java report references with IDs, completion times, dataset versions,
+and scoring versions. It orders them newest first, breaking timestamp ties
+by descending report ID. Use a saved report ID to reach older reports.
+
 Milestone 12B provides a read-only cohort summary. Send one to twenty
 distinct saved Java report IDs to `POST /api/benchmarks/coding-cohort`.
 

@@ -247,6 +247,11 @@ public class BenchmarkService {
                 checked, checked == PEER_SEARCH_WINDOW && candidates.size() > PEER_SEARCH_WINDOW && accepted.size() <= limit);
     }
 
+    public List<CodingBenchmarkCohort.SavedReport> recentCodingReports() {
+        if (repository == null) throw new IllegalStateException("Benchmark persistence is required");
+        return repository.findRecentCodingReports(MAX_COHORT_REPORTS);
+    }
+
     private BenchmarkReport findCohortReport(UUID id) {
         var report = find(id);
         if (!id.equals(report.id())) throw new InvalidCohortException("Stored report identity does not match its ID");

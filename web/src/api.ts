@@ -10,6 +10,42 @@ export type Execution = {
 };
 export type Run = Execution & { prompt: string; timestamp: string };
 export type RunPage = { content: Run[]; page: number; totalPages: number; totalElements: number };
+export type SavedCodingReport = { id: string; completedAt: string; datasetVersion: string; scoringVersion: string };
+export type CodingPeers = { seedReportId: string; reportIds: string[]; candidatesChecked: number; windowLimited: boolean };
+export type CodingTimelineEntry = {
+  reportId: string;
+  completedAt: string;
+  taskId: string;
+  model: string;
+  executionId: string;
+  executionStatus: string;
+  formatValidation: 'NOT_CHECKED' | 'PASSED' | 'REJECTED';
+  sandboxVerdict: string | null;
+  error: { stage: string; code: string | null } | null;
+  executionDurationMs: number;
+  gradingDurationMs: number | null;
+  sandboxTimeoutSeconds: number | null;
+};
+export type CodingModelSummary = {
+  config: Model;
+  attempted: number;
+  coding: {
+    sandboxVerdicts: number;
+    sandboxOutcomes: Record<string, number>;
+    invalidSubmissions: number;
+    graderInfrastructureFailures: number;
+    executionErrors: Record<string, number>;
+    rawFormat?: { checked: number; rejected: number };
+  };
+};
+export type CodingCohortReport = {
+  datasetId: string;
+  datasetVersion: string;
+  scoringVersion: string;
+  reports: { id: string; completedAt: string }[];
+  models: CodingModelSummary[];
+  timeline: CodingTimelineEntry[];
+};
 
 const messages: Record<string, string> = {
   UNKNOWN_MODEL: 'This model is no longer configured. Refresh the model list and choose another.',
@@ -46,6 +82,9 @@ async function request<T>(path: string, init?: RequestInit, keepExecution = fals
   // Generation returns a full execution even when its HTTP status indicates a provider failure.
   if (response.ok || (keepExecution && typeof body?.requestId === 'string')) return body as T;
   if (typeof body?.code === 'string' && typeof body?.message === 'string') {
+    if (path.startsWith('benchmarks/') && body.code === 'NOT_FOUND') {
+      throw new Error('The saved benchmark report could not be found. Choose a recent report or check its ID.');
+    }
     throw new Error(describeError(body));
   }
   throw new Error(`ModelHub returned HTTP ${response.status}.`);
@@ -68,4 +107,10 @@ export const api = {
   compare: (models: string[], prompt: string) =>
     request<{ results: Execution[] }>('compare', json({ models, prompt })),
   runs: (page: number, signal: AbortSignal) => request<RunPage>(`runs?page=${page}&size=10`, { signal }),
+  recentCodingReports: (signal: AbortSignal) => request<SavedCodingReport[]>('benchmarks/coding-reports', { signal }),
+  codingPeers: (id: string, signal: AbortSignal) =>
+    request<CodingPeers>(`benchmarks/${encodeURIComponent(id)}/coding-peers`, { signal }),
+  codingCohort: (reportIds: string[], signal: AbortSignal) =>
+    request<CodingCohortReport>('benchmarks/coding-cohort', { ...json({ reportIds }), signal }),
+  savedReportUrl: (id: string) => `/api/benchmarks/${encodeURIComponent(id)}`,
 };

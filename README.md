@@ -471,8 +471,20 @@ enable OpenRouter for the second model, keep its key in the root `.env`
 and restart the backend with `docker compose up -d --wait` from the
 repository root. Selecting that model sends your prompt to OpenRouter.
 
+Open **Coding Cohorts** to compare saved Java benchmark reports. Choose one of
+the 20 most recent reports or paste an older saved report ID, then select
+**Find compatible peers**. Keep the reports you want and select **Build
+cohort**. The dashboard shows whole-cohort totals and an oldest-first
+timeline. Filter the timeline by model, outcome, or failure stage, and use
+**Open report JSON** to inspect a source report in another tab.
+
+The dashboard reads from the running backend's PostgreSQL database. It needs
+at least one saved Java coding report and works with local or cloud providers
+offline. [Coding cohort API and interpretation](docs/benchmarks.md#compare-saved-coding-runs)
+
 The UI listens on `127.0.0.1:5173` and proxies the chat, compare, history,
-model, and health API requests to the backend at `127.0.0.1:8080`. Keep
+model, health, and saved coding report API requests to the backend at
+`127.0.0.1:8080`. Keep
 both services on loopback. When using a host backend instead of Compose,
 start it with `SERVER_ADDRESS=127.0.0.1` and `SERVER_PORT=8080`.
 

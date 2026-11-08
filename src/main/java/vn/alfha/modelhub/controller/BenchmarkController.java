@@ -1,6 +1,7 @@
 package vn.alfha.modelhub.controller;
 
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -33,6 +34,10 @@ public class BenchmarkController {
     @PostMapping("/coding-cohort")
     public CodingBenchmarkCohort codingCohort(@RequestBody CodingBenchmarkCohort.Request request) {
         return service.codingCohort(request.reportIds());
+    }
+    @GetMapping("/coding-reports")
+    public List<CodingBenchmarkCohort.SavedReport> recentCodingReports() {
+        return service.recentCodingReports();
     }
     @GetMapping("/{id}/coding-peers")
     public CodingBenchmarkCohort.Discovery codingPeers(@PathVariable UUID id, @RequestParam(defaultValue = "19") int limit) {

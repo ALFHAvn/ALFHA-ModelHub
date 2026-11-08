@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { api, type Execution, type Model } from './api';
+import { CodingCohort } from './CodingCohort';
 import { ExecutionDetails } from './ExecutionDetails';
 import { History } from './History';
 
@@ -7,14 +8,16 @@ const navigation = [
   { id: 'chat', label: 'Chat', icon: 'chat', description: 'Send a prompt to a configured model.' },
   { id: 'compare', label: 'Compare', icon: 'compare', description: 'Send the same prompt to two models and compare their responses.' },
   { id: 'history', label: 'History', icon: 'history', description: 'Review saved prompts, responses, and execution outcomes.' },
+  { id: 'coding', label: 'Coding Cohorts', icon: 'coding', description: 'Compare saved Java benchmark results and inspect what happened in each run.' },
 ] as const;
 type Tab = typeof navigation[number]['id'];
-type IconName = 'logo' | 'chat' | 'compare' | 'history' | 'refresh' | 'send' | 'chevron';
+type IconName = 'logo' | 'chat' | 'compare' | 'history' | 'coding' | 'refresh' | 'send' | 'chevron';
 const paths: Record<IconName, ReactNode> = {
   logo: <><path d="m12 2 9 5v10l-9 5-9-5V7z"/><path d="m3 7 9 5 9-5m-9 5v10M7.5 4.5l9 5"/></>,
   chat: <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H4l1.5-4A7.5 7.5 0 1 1 20 11.5ZM8 11.5h8m-8 3h5"/>,
   compare: <path d="M3 5h18v14H3zM12 5v14M6 9h3m6 0h3m-12 4h3m6 0h3"/>,
   history: <path d="M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5m4-1v5l3 2"/>,
+  coding: <path d="M5 4h14v16H5zM10 8l-3 4 3 4m4-8 3 4-3 4"/>,
   refresh: <path d="M20 11a8 8 0 1 0-2.3 6M20 5v6h-6"/>,
   send: <path d="m22 2-7 20-4-9-9-4 20-7ZM22 2 11 13"/>,
   chevron: <path d="m6 9 6 6 6-6"/>,
@@ -191,7 +194,7 @@ export function App() {
         {status === 'offline' && <p className="notice error" role="alert">
           Cannot reach ModelHub. Start the Spring Boot backend on port 8080, then refresh the connection.
         </p>}
-        {tab !== 'history' && online && (modelsError
+        {(tab === 'chat' || tab === 'compare') && online && (modelsError
           ? <p className="notice error" role="alert">{modelsError}</p>
           : loadingModels && !models.length
             ? <p className="notice" role="status">Loading configured models…</p>
@@ -199,6 +202,7 @@ export function App() {
         <div hidden={tab !== 'chat'}><Workspace mode="chat" models={models} online={online} /></div>
         <div hidden={tab !== 'compare'}><Workspace mode="compare" models={models} online={online} /></div>
         {tab === 'history' && <History online={online} />}
+        {tab === 'coding' && <CodingCohort online={online} refresh={refresh} />}
       </div>
     </main>
   </div>;

@@ -76,6 +76,9 @@ class BenchmarkIT {
                     assertEquals(404, get(client, base + "/api/routing/preview?profile=basic").statusCode());
                     assertEquals(404, routed(client, base, "basic", "test").statusCode());
                     assertEquals(503, coding(client, base).statusCode());
+                    var emptyCodingReports = get(client, base + "/api/benchmarks/coding-reports");
+                    assertEquals(200, emptyCodingReports.statusCode());
+                    assertEquals(mapper.readTree("[]"), mapper.readTree(emptyCodingReports.body()));
                     assertEquals(0, calls.get());
                     var dataset = get(client, base + "/api/benchmarks/dataset");
                     assertEquals(200, dataset.statusCode());
@@ -389,6 +392,16 @@ class BenchmarkIT {
                     int callsBeforeCohort = calls.get();
                     long reportsBeforeCohort = jdbc.queryForObject("SELECT count(*) FROM benchmark_reports", Long.class);
                     long executionsBeforeCohort = jdbc.queryForObject("SELECT count(*) FROM execution_runs", Long.class);
+                    var recentResponse = get(client, base + "/api/benchmarks/coding-reports");
+                    assertEquals(200, recentResponse.statusCode(), recentResponse.body());
+                    var recent = mapper.readTree(recentResponse.body());
+                    assertEquals(otherDeploymentId.toString(), recent.path(0).path("id").asString());
+                    assertEquals("2099-01-02T00:00:00Z", recent.path(0).path("completedAt").asString());
+                    assertEquals(repeatedId.toString(), recent.path(1).path("id").asString());
+                    assertEquals("1", recent.path(0).path("datasetVersion").asString());
+                    assertEquals("java-coding-raw-v1", recent.path(0).path("scoringVersion").asString());
+                    assertEquals(8, recent.size());
+                    assertEquals(4, recent.path(0).size());
                     var cohortResponse = cohort(client, base, secondId, firstId);
                     assertEquals(200, cohortResponse.statusCode(), cohortResponse.body());
                     var cohort = mapper.readTree(cohortResponse.body());
