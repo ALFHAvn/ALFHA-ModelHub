@@ -39,10 +39,12 @@ $cases = @(
     @{ name = 'oversize response'; text = $wrapped + ('x' * 16384); expected = $false }
 )
 foreach ($case in $cases) {
-    $actual = & $detector -Response $case.text
-    if ($actual -ne $case.expected) { throw "Unexpected decision for $($case.name)." }
+    foreach ($version in '1', '2') {
+        $actual = & $detector -Response $case.text -DetectorVersion $version
+        if ($actual -ne $case.expected) { throw "Unexpected v$version decision for $($case.name)." }
+    }
 }
-"Passed $($cases.Count) envelope classification cases."
+"Both versions passed $($cases.Count) shared classification cases."
 
 $javadoc = @'
 /**
@@ -83,9 +85,11 @@ $valid = @(
     @{ id = 'crlf-line-comments-annotation'; source = ("$lineComments`n$median" -replace '\r?\n', "`r`n") }
 )
 foreach ($case in $valid) {
-    if (& $detector -Response $case.source) { throw "Flagged valid Java fixture $($case.id)." }
+    foreach ($version in '1', '2') {
+        if (& $detector -Response $case.source -DetectorVersion $version) { throw "V$version flagged valid Java fixture $($case.id)." }
+    }
 }
-"No flags among $($valid.Count) valid Java fixtures."
+"Neither version flagged any of the $($valid.Count) valid Java fixtures."
 
 $unlabeled = $fenced.Replace('```java', '```')
 $longFence = '````java' + "`nclass Main {}`n" + '````'
@@ -104,9 +108,26 @@ $wrappers = @(
 $misses = @(foreach ($case in $wrappers) {
     $actual = & $detector -Response $case.text
     if ($actual -ne $case.detected) { throw "Prose-wrapper baseline changed for $($case.id)." }
+    if (-not (& $detector -Response $case.text -DetectorVersion 2)) { throw "V2 missed $($case.id)." }
     if (-not $actual) { $case.id }
 })
-"Detected $($wrappers.Count - $misses.Count)/$($wrappers.Count) synthetic wrappers. Misses $($misses -join ', ')."
+"V1 detected $($wrappers.Count - $misses.Count)/$($wrappers.Count) synthetic wrappers. V2 detected all $($wrappers.Count)."
+
+$additional = @(
+    @{ id = 'long-tilde-and-bold'; text = "**Below is the source.**`r`n~~~~~ java`r`n$median`r`n~~~~~`r`nEnd."; detected = $true }
+    @{ id = 'unlabeled-final-class'; text = "Here are the results.`n~~~`npublic final class Main`n{}`n~~~`nEnd."; detected = $true }
+    @{ id = 'unlabeled-python'; text = "Here is the source.`n~~~`nprint('class Main {}')`n~~~`nEnd."; detected = $false }
+    @{ id = 'unlabeled-prose'; text = "Here is the result.`n~~~`nclass Main`nis a Java entry point.`n~~~`nEnd."; detected = $false }
+    @{ id = 'unlabeled-other-class'; text = "Here is the source.`n~~~`nclass Helper {}`n~~~`nEnd."; detected = $false }
+    @{ id = 'mismatched-length'; text = "Below is the source.`n~~~~java`nclass Main {}`n~~~`nEnd."; detected = $false }
+    @{ id = 'unmatched-bold'; text = "**Below is the source.`n$fenced`nEnd."; detected = $false }
+)
+foreach ($case in $additional) {
+    if ((& $detector -Response $case.text -DetectorVersion 2) -ne $case.detected) {
+        throw "Unexpected v2 decision for $($case.id)."
+    }
+}
+"V2 passed $($additional.Count) additional wrapper and ambiguity checks."
 
 if ($VerifyDocker) {
     $target = (New-Item -ItemType Directory -Force -Path (Join-Path $PSScriptRoot '../target')).FullName

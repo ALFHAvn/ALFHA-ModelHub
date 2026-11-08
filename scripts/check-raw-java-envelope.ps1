@@ -1,15 +1,26 @@
 #Requires -Version 7.5
 param(
     [Parameter(Mandatory, ParameterSetName = 'Text')][AllowEmptyString()][string]$Response,
-    [Parameter(Mandatory, ParameterSetName = 'Replay')][string]$ComparisonDirectory
+    [Parameter(Mandatory, ParameterSetName = 'Replay')][string]$ComparisonDirectory,
+    [ValidateSet('1', '2')][string]$DetectorVersion = '1'
 )
 
 $ErrorActionPreference = 'Stop'
 
 function Test-ProseWrappedJavaFence([string]$Text) {
-    if ([Text.Encoding]::UTF8.GetByteCount($Text) -gt 16384 -or
-        $Text.TrimStart() -notmatch '\A(?:(?:Certainly|Sure|Of course)[!,:]\s|Here(?:''s| is)\s)') {
-        return $false
+    if ([Text.Encoding]::UTF8.GetByteCount($Text) -gt 16384) { return $false }
+    if ($DetectorVersion -ceq '1') {
+        if ($Text.TrimStart() -notmatch '\A(?:(?:Certainly|Sure|Of course)[!,:]\s|Here(?:''s| is)\s)') { return $false }
+        $openingPattern = '(?i)^[ \t]*(?<marker>\x60{3}|~{3})[ \t]*java[ \t]*$'
+    } else {
+        $intro = ($Text.TrimStart() -split '\r\n|\n|\r', 2)[0].TrimEnd()
+        if ($intro.Length -gt 4 -and $intro.StartsWith('**') -and $intro.EndsWith('**')) {
+            $intro = $intro.Substring(2, $intro.Length - 4).Trim()
+        }
+        if ($intro -notmatch '\A(?:(?:Certainly|Sure|Of course)[!,:]|Here(?:[''\u2019]s|[ \t]+(?:is|are))|Below[ \t]+(?:is|are))(?:\s|$)') {
+            return $false
+        }
+        $openingPattern = '(?i)^[ \t]*(?<marker>\x60{3,}|~{3,})[ \t]*(?<label>java)?[ \t]*$'
     }
     $lines = $Text -split '\r\n|\n|\r'
     $fences = @(for ($i = 0; $i -lt $lines.Count; $i++) {
@@ -17,12 +28,16 @@ function Test-ProseWrappedJavaFence([string]$Text) {
     })
     if ($fences.Count -ne 2) { return $false }
     $start, $end = $fences
-    $opening = [regex]::Match($lines[$start], '(?i)^[ \t]*(?<marker>\x60{3}|~{3})[ \t]*java[ \t]*$')
+    $opening = [regex]::Match($lines[$start], $openingPattern)
     if (-not $opening.Success -or $lines[$end].Trim() -cne $opening.Groups['marker'].Value -or
         $end -le ($start + 1) -or $end -eq ($lines.Count - 1)) { return $false }
 
     $inside = $lines[($start + 1)..($end - 1)] -join "`n"
     $after = $lines[($end + 1)..($lines.Count - 1)] -join "`n"
+    if ($DetectorVersion -ceq '2' -and -not $opening.Groups['label'].Success -and
+        $inside.TrimStart() -cnotmatch '\A(?:public[ \t]+)?(?:final[ \t]+)?class[ \t]+Main[ \t]*(?:\n[ \t]*)?\{') {
+        return $false
+    }
     return -not [string]::IsNullOrWhiteSpace($inside) -and -not [string]::IsNullOrWhiteSpace($after)
 }
 
@@ -64,4 +79,4 @@ $results = @(for ($i = 0; $i -lt $summary.results.Count; $i++) {
         proseWrappedJavaFence = Test-ProseWrappedJavaFence $execution.response
     }
 })
-[ordered]@{ diagnostic = 'raw-java-prose-envelope-v1'; results = $results } | ConvertTo-Json -Depth 5
+[ordered]@{ diagnostic = "raw-java-prose-envelope-v$DetectorVersion"; results = $results } | ConvertTo-Json -Depth 5

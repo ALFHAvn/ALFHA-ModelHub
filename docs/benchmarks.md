@@ -330,6 +330,28 @@ were chosen to exercise both supported and unsupported patterns. This result
 describes the rule's coverage on those examples and does not estimate how
 often a model produces each pattern.
 
+##### Detector v2
+
+`-DetectorVersion 2` recognizes `Below is`, curly apostrophes, and complete
+bold formatting around an introduction. It accepts longer fences when both
+markers use the same character and length. For an unlabeled block, the first
+nonblank line must start a simple `class Main` declaration with an opening
+brace. Both versions require exactly one fence pair and nonblank text after
+the closing marker. The detector stays offline and version `1` remains the
+default.
+
+```powershell
+./scripts/check-raw-java-envelope.ps1 -DetectorVersion 2 -ComparisonDirectory ./target/raw-java-prompt-v1-573e5e20c24b49f4aa1eccdbcfaabe85
+```
+
+V2 detected all ten synthetic wrappers, compared with five for v1. Neither
+version flagged any of the six Java controls. V2 also passed seven additional
+checks, including longer tilde fences and an unlabeled Java class, and left
+ambiguous markers and unlabeled non-Java examples unclassified. Both
+versions reproduced the four saved classifications. These are hand-written
+examples and a four-response replay, so they establish coverage for the
+tested patterns. The detector does not parse or compile Java.
+
 For manual grading, save a candidate's UTF-8 source as a file and invoke the
 same runner directly.
 
