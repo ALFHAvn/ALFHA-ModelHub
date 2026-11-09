@@ -439,37 +439,54 @@ remain stubbed; real cloud calls are not part of this test.
 
 ## Local Web UI on Windows 11
 
-Use PowerShell, Docker Desktop in Linux-container mode, Ollama for Windows,
-and Node.js 22.12 or newer with npm. Run the following from the repository
-root. Check that Ollama is running and choose a model from `ollama list`.
-If Ollama is stopped, run `ollama serve` in a separate PowerShell window.
+Use Windows 11 and a running Docker Desktop with Docker Compose and Linux
+containers. Install Ollama and a local model separately if you want local
+inference. The launcher uses the Docker access already granted to your
+Windows account. Docker builds and packages the web UI with the backend.
+Node.js, Java, Maven, and PostgreSQL run inside Docker for this setup.
+
+From the repository root, create the local configuration once:
 
 ```powershell
-ollama list
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 notepad .env
 ```
 
 In `.env`, set a unique `DATABASE_PASSWORD` for a new database, or use the
 existing password for an initialized Compose volume. Set `OLLAMA_MODEL`
-to the exact installed model ID and keep `APP_PORT=8080` for the UI proxy.
-For local-only inference set `OPENROUTER_ENABLED=false`. Save the file and run:
+to the exact installed model ID from `ollama list` and use
+`OPENROUTER_ENABLED=false` for local-only inference. Keep the existing
+`COMPOSE_PROJECT_NAME` if you previously used one for this checkout.
 
-```powershell
-docker compose up -d --build --wait
-Invoke-RestMethod http://127.0.0.1:8080/api/health
-Set-Location web
-npm ci
-npm run dev
-```
+Double-click **Start-ModelHub.cmd** in File Explorer, or run
+`.\Start-ModelHub.cmd` from PowerShell. Docker checks the image build each
+time and may contact package or image registries. The first build downloads
+the dependencies and images it needs. The launcher reuses the app and
+PostgreSQL containers when their image and configuration are current.
+It opens the default browser after checking the backend,
+page, and JavaScript bundle. The default URL is
+[http://127.0.0.1:8080/](http://127.0.0.1:8080/). Change `APP_PORT` in
+`.env` if that port is occupied.
 
-Open [ModelHub](http://127.0.0.1:5173/) in your browser. Choose a model in
-**Chat**, enter a prompt, and select **Send prompt**. Responses show execution
-status and backend-measured latency. Open **History** to browse saved
+The launcher checks Ollama from inside the app container. With the default
+Ollama URL and an installed `ollama` command, it can start `ollama serve` on
+Windows loopback if Ollama is stopped. A warning leaves the UI available
+for saved history and reports. The launcher window stays open so you can
+read the result.
+
+Double-click **Stop-ModelHub.cmd** or run `.\Stop-ModelHub.cmd` to stop the
+app and database for this Compose project. The database volume and Ollama
+session are retained. Use the same checkout and Compose project settings
+for start and stop.
+
+### Using the web interface
+
+Choose a model in **Chat**, enter a prompt, and select **Send prompt**.
+Responses show execution status and backend-measured latency. Open **History** to browse saved
 executions. **Compare** requires two distinct configured models. If you
 enable OpenRouter for the second model, keep its key in the root `.env`
-and restart the backend with `docker compose up -d --wait` from the
-repository root. Selecting that model sends your prompt to OpenRouter.
+and run **Start-ModelHub.cmd** again. Selecting that model sends your prompt
+to OpenRouter.
 
 Open **Coding Cohorts** to compare saved Java benchmark reports. Choose one of
 the 20 most recent reports or paste an older saved report ID, then select
@@ -482,32 +499,44 @@ The dashboard reads from the running backend's PostgreSQL database. It needs
 at least one saved Java coding report and works with local or cloud providers
 offline. [Coding cohort API and interpretation](docs/benchmarks.md#compare-saved-coding-runs)
 
-The UI listens on `127.0.0.1:5173` and proxies the chat, compare, history,
-model, health, and saved coding report API requests to the backend at
-`127.0.0.1:8080`. Keep
-both services on loopback. When using a host backend instead of Compose,
-start it with `SERVER_ADDRESS=127.0.0.1` and `SERVER_PORT=8080`.
+### Troubleshooting
 
-If the UI says **Backend offline**, check `docker compose ps` and refresh
-the connection in the UI. If the backend is online but Ollama is unreachable,
-check the configured `OLLAMA_BASE_URL` from Docker as described below.
-Stop Vite with Ctrl+C and run `docker compose stop` from the repository root
-when finished. The database volume retains your history.
+- **Docker is unavailable**. Start Docker Desktop, wait for it to be ready,
+  and check that it is using Linux containers.
+- **ModelHub does not become ready**. From the repository root, run
+  `docker compose ps` and `docker compose logs --tail=100 app db`. Check
+  `APP_PORT` for conflicts and keep the database password that initialized
+  the existing volume.
+- **Ollama is unreachable**. Check that the installed model ID matches
+  `OLLAMA_MODEL` and that the app container can reach `OLLAMA_BASE_URL`.
+  See the Compose notes below for Docker host networking.
+- **The browser does not open**. If the launcher printed a ready URL, open
+  it directly and check the Windows default browser setting.
 
-To verify the frontend from the `web` directory:
+### Frontend development
+
+For hot reload, keep the backend on port 8080, install Node.js 22.12 or
+newer, and run `npm ci` and `npm run dev` from `web`. The Vite UI is at
+[http://127.0.0.1:5173/](http://127.0.0.1:5173/) and proxies its API calls to
+the backend on loopback. Use Ctrl+C to stop Vite. Run `npm test` and
+`npm run build` from `web` to verify frontend changes. For a host backend,
+set `SERVER_ADDRESS=127.0.0.1` and `SERVER_PORT=8080` before starting Spring Boot.
+
+To verify the Windows launcher, run the following from the repository root.
+It starts a disposable Compose project on port 18080 and captures the browser
+handoff. Pass `-AppPort` with a free port if 18080 is in use.
 
 ```powershell
-npm test
-npm run build
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\scripts\test-modelhub-launcher.ps1
 ```
 
 ## Docker Compose quick start
 
-Docker Desktop must be running Linux containers. You do not need a host JDK,
-Maven, or PostgreSQL for this path. Ollama runs separately on the host.
+Docker Desktop must be running Linux containers. The image serves the web UI
+and API on the same port. Ollama runs separately on the host.
 
 ```powershell
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 # Edit .env and set DATABASE_PASSWORD to a unique local password.
 docker compose up --build --wait
 Invoke-RestMethod http://localhost:8080/api/health
