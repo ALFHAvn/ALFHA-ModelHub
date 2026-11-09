@@ -306,3 +306,17 @@ and benchmark requests retain their original payloads.
 
 Tests use fixture catalog responses and stub providers. Live enforcement of
 zero-valued limits and account-level billing behavior remain unverified.
+
+## Planned routing interface
+
+After the coding cohort report viewer, add a read-only **Routing Preview**
+page backed by `GET /api/routing/preview?profile=basic`. Show the selected
+model and reason, or clearly distinguish local fallback from no route.
+Show candidate metrics, sample sizes, evidence age, and exclusions alongside
+links to the saved reports. Explain how to enable preview if the backend
+returns 404 for the optional route.
+
+Acceptance tests should cover evidence-backed selection, fallback, no route,
+disabled preview, and connection errors. Preview sends no task to a model.
+Routed generation can follow as a separate, explicit action once the
+decision and cloud controls are clear in the interface.

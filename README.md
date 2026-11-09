@@ -488,6 +488,18 @@ enable OpenRouter for the second model, keep its key in the root `.env`
 and run **Start-ModelHub.cmd** again. Selecting that model sends your prompt
 to OpenRouter.
 
+Open **Proposal & Review** to select two distinct models, enter a task, and
+run the workflow. The page shows the proposal and feedback separately with
+the model IDs, status, and elapsed time for each attempted step. A successful
+proposal remains visible if the review fails. A skipped review shows why it
+could not run. Both results arrive together after the workflow finishes.
+
+For two local models, set `OLLAMA_SECONDARY_MODEL` in `.env` and restart
+ModelHub. An eligible fixed free OpenRouter model appears only after you
+enable the cloud option on this page. A cloud reviewer receives both the
+task and the proposal. The [workflow API](#two-model-proposal-and-review)
+enforces the price limit.
+
 Open **Coding Cohorts** to compare saved Java benchmark reports. Choose one of
 the 20 most recent reports or paste an older saved report ID, then select
 **Find compatible peers**. Keep the reports you want and select **Build

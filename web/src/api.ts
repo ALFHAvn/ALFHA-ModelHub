@@ -10,6 +10,8 @@ export type Execution = {
 };
 export type Run = Execution & { prompt: string; timestamp: string };
 export type RunPage = { content: Run[]; page: number; totalPages: number; totalElements: number };
+export type WorkflowStep = Omit<Execution, 'requestId'> & { requestId: string | null };
+export type ProposalReviewResult = { proposal: WorkflowStep; review: WorkflowStep };
 export type SavedCodingReport = { id: string; completedAt: string; datasetVersion: string; scoringVersion: string };
 export type CodingPeers = { seedReportId: string; reportIds: string[]; candidatesChecked: number; windowLimited: boolean };
 export type CodingTimelineEntry = {
@@ -85,6 +87,9 @@ async function request<T>(path: string, init?: RequestInit, keepExecution = fals
     if (path.startsWith('benchmarks/') && body.code === 'NOT_FOUND') {
       throw new Error('The saved benchmark report could not be found. Choose a recent report or check its ID.');
     }
+    if (path === 'workflows/proposal-review' && body.code === 'INVALID_INPUT') {
+      throw new Error('ModelHub rejected this workflow. Check the task, use distinct models, and confirm any cloud model is fixed free on the official OpenRouter endpoint.');
+    }
     throw new Error(describeError(body));
   }
   throw new Error(`ModelHub returned HTTP ${response.status}.`);
@@ -106,6 +111,8 @@ export const api = {
     request<Execution>('generate', json({ model, prompt }), true),
   compare: (models: string[], prompt: string) =>
     request<{ results: Execution[] }>('compare', json({ models, prompt })),
+  proposalReview: (proposerModel: string, reviewerModel: string, prompt: string, allowCloud: boolean) =>
+    request<ProposalReviewResult>('workflows/proposal-review', json({ proposerModel, reviewerModel, prompt, allowCloud })),
   runs: (page: number, signal: AbortSignal) => request<RunPage>(`runs?page=${page}&size=10`, { signal }),
   recentCodingReports: (signal: AbortSignal) => request<SavedCodingReport[]>('benchmarks/coding-reports', { signal }),
   codingPeers: (id: string, signal: AbortSignal) =>

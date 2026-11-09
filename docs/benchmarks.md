@@ -518,6 +518,17 @@ window. `windowLimited` is true if the window ended before the requested
 peer count was reached and older candidates exist. This read-only search
 uses one saved report as its starting point and makes zero model calls.
 
+##### Next dashboard improvement
+
+The dashboard already supports peer discovery, cohort totals, timeline filters,
+and links to report JSON. Next, add an in-app detail view for a selected
+timeline result using `GET /api/benchmarks/{id}`. Use the execution ID to show
+the matching saved response, retry attempts, and grader case results. Keep
+the timeline filters and JSON link available while inspecting a result.
+Acceptance tests should cover opening the right execution, loading and
+missing reports, absent grader data, and returning to the same filtered
+timeline. The viewer will read saved evidence only.
+
 The public fixtures measure behavior on six inputs, so hard-coded answers can
 pass. The coding benchmark is synchronous and limited to a single Java source
 file of at most 16 KiB. Container isolation relies on the Docker runtime and

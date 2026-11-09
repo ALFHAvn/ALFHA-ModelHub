@@ -117,6 +117,10 @@ textarea::placeholder { color: #60736a; }
 .badge { display: inline-block; width: max-content; font-size: 12px; font-weight: 700; border-radius: 99px; padding: 3px 8px; }
 .success { color: #146044; background: #e5f5ed; }
 .failed { color: #9b2b24; background: #fff0ed; }
+.neutral { color: var(--muted); background: #eef2ef; }
+.workflow-opt-in { display: flex; align-items: baseline; gap: 8px; font-weight: 650; }
+.workflow-opt-in input { margin: 0; }
+.workflow-model { color: var(--muted); margin: 4px 0 0; overflow-wrap: anywhere; }
 .response {
   margin: 0; padding: 13px; background: #f5f8f6; border-radius: 8px;
   white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.6;
