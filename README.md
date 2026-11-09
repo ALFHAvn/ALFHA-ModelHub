@@ -504,8 +504,10 @@ Open **Coding Cohorts** to compare saved Java benchmark reports. Choose one of
 the 20 most recent reports or paste an older saved report ID, then select
 **Find compatible peers**. Keep the reports you want and select **Build
 cohort**. The dashboard shows whole-cohort totals and an oldest-first
-timeline. Filter the timeline by model, outcome, or failure stage, and use
-**Open report JSON** to inspect a source report in another tab.
+timeline. Filter by model, outcome, or failure stage. Use **Inspect evidence**
+on a timeline row to view its original response, earlier attempts, and grader
+cases. Closing the evidence keeps your filters. **Open report JSON** opens
+the complete source report in another tab.
 
 The dashboard reads from the running backend's PostgreSQL database. It needs
 at least one saved Java coding report and works with local or cloud providers

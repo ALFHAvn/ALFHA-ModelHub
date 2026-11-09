@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api, type CodingCohortReport, type CodingModelSummary, type CodingTimelineEntry } from './api';
+import { CodingEvidence } from './CodingEvidence';
 
 const outcomeLabels: Record<string, string> = {
   PASS: 'Passed', WRONG_ANSWER: 'Incorrect answer', FORMAT_ERROR: 'Format rejection',
@@ -41,7 +42,10 @@ function ModelCounts({ summary }: { summary: CodingModelSummary }) {
   </article>;
 }
 
-function TimelineRow({ row }: { row: CodingTimelineEntry }) {
+function TimelineRow({ row, expanded, onToggle }: {
+  row: CodingTimelineEntry; expanded: boolean; onToggle: () => void;
+}) {
+  const evidenceId = `evidence-${row.executionId}`;
   return <li className="card result cohort-run">
     <div className="cohort-run-title">
       <h3>{row.taskId} <small>{row.model}</small></h3>
@@ -60,9 +64,12 @@ function TimelineRow({ row }: { row: CodingTimelineEntry }) {
       {row.sandboxTimeoutSeconds != null && <span>Case limit {row.sandboxTimeoutSeconds} s</span>}
     </div>
     <div className="cohort-run-meta">
+      <button className="secondary" type="button" onClick={onToggle} aria-expanded={expanded}
+        aria-controls={expanded ? evidenceId : undefined}>{expanded ? 'Close evidence' : 'Inspect evidence'}</button>
       <a href={api.savedReportUrl(row.reportId)} target="_blank" rel="noopener">Open report JSON</a>
       <small>Execution <code>{row.executionId}</code></small>
     </div>
+    {expanded && <CodingEvidence row={row} id={evidenceId} />}
   </li>;
 }
 
@@ -70,6 +77,7 @@ export function CodingCohortResults({ cohort }: { cohort: CodingCohortReport }) 
   const [modelFilter, setModelFilter] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState('');
   const [stageFilter, setStageFilter] = useState('');
+  const [expandedId, setExpandedId] = useState<string>();
   const models = [...new Set(cohort.timeline.map(row => row.model))].sort();
   const outcomes = [...new Set(cohort.timeline.map(outcome))].sort();
   const stages = [...new Set(cohort.timeline.map(row => row.error?.stage ?? 'NONE'))].sort();
@@ -110,7 +118,8 @@ export function CodingCohortResults({ cohort }: { cohort: CodingCohortReport }) 
         {cohort.timeline.length ? 'No results match these filters.' : 'No saved results in this cohort.'}
       </p>}
       <ol className="cohort-timeline">
-        {filtered.map(row => <TimelineRow key={row.executionId} row={row} />)}
+        {filtered.map(row => <TimelineRow key={row.executionId} row={row} expanded={expandedId === row.executionId}
+          onToggle={() => setExpandedId(current => current === row.executionId ? undefined : row.executionId)} />)}
       </ol>
     </section>
   </>;

@@ -158,6 +158,13 @@ textarea::placeholder { color: #60736a; }
 .cohort-run-title { justify-content: space-between; }
 .cohort-run-meta { margin-top: 8px; font-size: 13px; overflow-wrap: anywhere; }
 .cohort-neutral { color: var(--muted); background: #eef2ef; }
+.coding-evidence { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 14px; overflow-wrap: anywhere; }
+.coding-evidence h4 { margin: 0 0 8px; }
+.coding-evidence h5 { margin: 14px 0 6px; font-size: 14px; }
+.coding-evidence details { padding: 6px 0; }
+.coding-evidence summary { cursor: pointer; font-size: 14px; }
+.coding-cases { margin: 0; padding-left: 20px; font-size: 14px; }
+.coding-cases li + li { margin-top: 5px; }
 @media (max-width: 720px) {
   .shell { grid-template-columns: minmax(0, 1fr); }
   .sidebar { gap: 12px; padding: 14px 16px 8px; }

@@ -48,6 +48,17 @@ export type CodingCohortReport = {
   models: CodingModelSummary[];
   timeline: CodingTimelineEntry[];
 };
+export type SavedCodingResult = {
+  taskId: string;
+  execution: Execution;
+  score: string;
+  attempts?: Execution[] | null;
+  codingEvaluation?: {
+    outcome: string;
+    cases?: { id: string; outcome: string; durationMs: number }[] | null;
+  } | null;
+};
+export type SavedBenchmarkReport = { id: string; results: SavedCodingResult[] };
 
 const messages: Record<string, string> = {
   UNKNOWN_MODEL: 'This model is no longer configured. Refresh the model list and choose another.',
@@ -119,5 +130,7 @@ export const api = {
     request<CodingPeers>(`benchmarks/${encodeURIComponent(id)}/coding-peers`, { signal }),
   codingCohort: (reportIds: string[], signal: AbortSignal) =>
     request<CodingCohortReport>('benchmarks/coding-cohort', { ...json({ reportIds }), signal }),
+  savedBenchmarkReport: (id: string, signal: AbortSignal) =>
+    request<SavedBenchmarkReport>(`benchmarks/${encodeURIComponent(id)}`, { signal }),
   savedReportUrl: (id: string) => `/api/benchmarks/${encodeURIComponent(id)}`,
 };

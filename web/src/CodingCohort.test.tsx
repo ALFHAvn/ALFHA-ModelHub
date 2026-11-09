@@ -156,3 +156,73 @@ test('reports a failed backend request while loading recent reports', async () =
   await openDashboard();
   expect((await screen.findByRole('alert')).textContent).toContain('Could not load recent reports. Cannot reach ModelHub.');
 });
+
+test('opens the exact saved execution, earlier attempts and grader cases without resetting filters', async () => {
+  const response = ' `raw source`\n<script>original text</script>\n';
+  const execution = { requestId: savedRow.executionId, model: local, response, durationMs: 420, status: 'SUCCESS', error: null };
+  const earlier = { ...execution, requestId: 'retry-1', response: null, durationMs: 150, status: 'FAILED',
+    error: { code: 'TIMEOUT', message: 'Timed out' } };
+  let finishEvidence!: (value: Response) => void;
+  const fetch = backend(url => {
+    if (url === `${base}/coding-reports`) return json(recent);
+    if (url.endsWith('/coding-peers')) return json(discovery);
+    if (url === `${base}/coding-cohort`) return json(cohort);
+    if (url === `${base}/${seedId}`) return new Promise(resolve => { finishEvidence = resolve; });
+    throw new Error(`Unexpected request to ${url}`);
+  });
+  const user = await openDashboard();
+  await chooseRecent(user);
+  await user.click(await screen.findByRole('button', { name: 'Build cohort' }));
+  const timeline = within(await screen.findByRole('region', { name: 'Coding timeline' }));
+  await user.selectOptions(timeline.getByLabelText('Outcome filter'), 'WRONG_ANSWER');
+  await user.click(timeline.getByRole('button', { name: 'Inspect evidence' }));
+  expect(timeline.getByText('Loading saved evidence…')).toBeTruthy();
+  finishEvidence(json({ id: seedId, results: [
+    { taskId: savedRow.taskId, score: 'PASS', execution: { ...execution, requestId: 'other', response: 'Other run' } },
+    { taskId: savedRow.taskId, score: 'FAIL', execution, attempts: [earlier, execution],
+      codingEvaluation: { outcome: 'WRONG_ANSWER', cases: [{ id: 'ascending', outcome: 'WRONG_ANSWER', durationMs: 14 }] } },
+  ] }));
+  const evidence = within(timeline.getByRole('region', { name: 'Saved coding evidence' }));
+  await evidence.findByText('Final attempt and original response');
+  expect(evidence.getByText(/original text/).textContent).toBe(response);
+  expect(evidence.queryByText('Other run')).toBeNull();
+  await user.click(evidence.getByText(/Earlier attempt 1/));
+  expect(evidence.getByText('retry-1')).toBeTruthy();
+  expect(evidence.getByRole('alert').textContent).toContain('provider timed out');
+  expect(evidence.getByText('ascending')).toBeTruthy();
+  expect(evidence.getByText('14 ms')).toBeTruthy();
+  await user.click(timeline.getByRole('button', { name: 'Close evidence' }));
+  expect(timeline.queryByRole('region', { name: 'Saved coding evidence' })).toBeNull();
+  expect(timeline.getByText('Showing 1 of 4 results')).toBeTruthy();
+  expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url]) => url)).toEqual([`${base}/coding-cohort`]);
+});
+
+test('recovers from a connection error and handles missing evidence and older reports', async () => {
+  const report = vi.fn().mockRejectedValueOnce(new Error('Connection lost'))
+    .mockResolvedValueOnce(json({ code: 'NOT_FOUND', message: 'Missing report' }, 404))
+    .mockResolvedValueOnce(json({ id: seedId, results: [] }))
+    .mockResolvedValueOnce(json({ id: seedId, results: [{
+      taskId: savedRow.taskId, score: 'NOT_SCORED',
+      execution: { requestId: savedRow.executionId, model: local, durationMs: 10, status: 'FAILED', response: null, error: null },
+    }] }));
+  backend(url => {
+    if (url === `${base}/coding-reports`) return json(recent);
+    if (url.endsWith('/coding-peers')) return json(discovery);
+    if (url === `${base}/coding-cohort`) return json({ ...cohort, timeline: [savedRow] });
+    return report();
+  });
+  const user = await openDashboard();
+  await chooseRecent(user);
+  await user.click(await screen.findByRole('button', { name: 'Build cohort' }));
+  await user.click(await screen.findByRole('button', { name: 'Inspect evidence' }));
+  const evidence = within(screen.getByRole('region', { name: 'Saved coding evidence' }));
+  expect((await evidence.findByRole('alert')).textContent).toContain('Cannot reach ModelHub');
+  await user.click(evidence.getByRole('button', { name: 'Retry loading evidence' }));
+  expect((await evidence.findByRole('alert')).textContent).toContain('saved benchmark report could not be found');
+  await user.click(evidence.getByRole('button', { name: 'Retry loading evidence' }));
+  expect((await evidence.findByRole('alert')).textContent).toContain('selected execution was not found');
+  await user.click(evidence.getByRole('button', { name: 'Retry loading evidence' }));
+  expect(await evidence.findByText('No response was saved for this attempt.')).toBeTruthy();
+  expect(evidence.getByText('No earlier attempts were recorded.')).toBeTruthy();
+  expect(evidence.getByText('No grader cases were recorded for this execution.')).toBeTruthy();
+});

@@ -518,16 +518,16 @@ window. `windowLimited` is true if the window ended before the requested
 peer count was reached and older candidates exist. This read-only search
 uses one saved report as its starting point and makes zero model calls.
 
-##### Next dashboard improvement
+##### Inspect saved execution evidence
 
-The dashboard already supports peer discovery, cohort totals, timeline filters,
-and links to report JSON. Next, add an in-app detail view for a selected
-timeline result using `GET /api/benchmarks/{id}`. Use the execution ID to show
-the matching saved response, retry attempts, and grader case results. Keep
-the timeline filters and JSON link available while inspecting a result.
-Acceptance tests should cover opening the right execution, loading and
-missing reports, absent grader data, and returning to the same filtered
-timeline. The viewer will read saved evidence only.
+Choose **Inspect evidence** on a timeline row. The dashboard reads
+`GET /api/benchmarks/{id}` and matches the saved execution ID, model, and task.
+It shows the original response as plain text, the saved score, any earlier
+attempts in their recorded order, and grader case outcomes and durations.
+Provider failures, format rejections, and older reports can lack grader
+cases. The dashboard labels these absences and keeps the current filters
+and full report JSON link available. Opening evidence makes no model calls
+and starts no grading.
 
 The public fixtures measure behavior on six inputs, so hard-coded answers can
 pass. The coding benchmark is synchronous and limited to a single Java source
