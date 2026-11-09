@@ -59,6 +59,40 @@ export type SavedCodingResult = {
   } | null;
 };
 export type SavedBenchmarkReport = { id: string; results: SavedCodingResult[] };
+export type RoutingCandidate = {
+  model: string;
+  provider: string;
+  reasons: string[];
+  pricingObservedAt?: string;
+  metrics: {
+    reports: number;
+    distinctTasks: number;
+    attempted: number;
+    scored: number;
+    passed: number;
+    incorrect: number;
+    providerFailures: number;
+    correctness: number | null;
+    reliability: number | null;
+    medianLatencyMs: number | null;
+  };
+};
+export type RoutingDecision = {
+  profile: string;
+  policyVersion: string;
+  asOf: string;
+  datasetId: string;
+  datasetVersion: string;
+  evidenceCutoff: string | null;
+  outcome: 'EVIDENCE_SELECTED' | 'FALLBACK_LOCAL' | 'NO_ROUTE';
+  selectedModel: string | null;
+  reason: string;
+  thresholds: { minReports: number; minAttempts: number; minScored: number; minReliabilityPercent: number;
+    correctnessBandPoints: number; maxAgeDays: number };
+  reportIds: string[];
+  exclusions: { reportId: string | null; reason: string }[];
+  candidates: RoutingCandidate[];
+};
 
 const messages: Record<string, string> = {
   UNKNOWN_MODEL: 'This model is no longer configured. Refresh the model list and choose another.',
@@ -85,6 +119,9 @@ async function request<T>(path: string, init?: RequestInit, keepExecution = fals
     response = await fetch(`/api/${path}`, init);
   } catch {
     throw new Error(backendUnavailable);
+  }
+  if (path === 'routing/preview?profile=basic' && response.status === 404) {
+    throw new Error('Routing preview is unavailable on this backend. Set MODELHUB_ROUTING_PREVIEW_ENABLED=true in .env and restart ModelHub.');
   }
   let body;
   try {
@@ -133,4 +170,5 @@ export const api = {
   savedBenchmarkReport: (id: string, signal: AbortSignal) =>
     request<SavedBenchmarkReport>(`benchmarks/${encodeURIComponent(id)}`, { signal }),
   savedReportUrl: (id: string) => `/api/benchmarks/${encodeURIComponent(id)}`,
+  routingPreview: (signal: AbortSignal) => request<RoutingDecision>('routing/preview?profile=basic', { signal }),
 };

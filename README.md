@@ -513,6 +513,13 @@ The dashboard reads from the running backend's PostgreSQL database. It needs
 at least one saved Java coding report and works with local or cloud providers
 offline. [Coding cohort API and interpretation](docs/benchmarks.md#compare-saved-coding-runs)
 
+Open **Routing Preview** and select **Preview route** to see the basic
+profile's recommendation, fallback reason, and candidate evidence. Enable
+it with `MODELHUB_ROUTING_PREVIEW_ENABLED=true` in `.env`, then restart
+ModelHub. Set a cutoff and curated Basics v2 report IDs to evaluate saved
+evidence. The page sends no task to a model.
+[Preview setup and interpretation](docs/routing-design.md#routing-preview-in-the-web-interface)
+
 ### Troubleshooting
 
 - **Docker is unavailable**. Start Docker Desktop, wait for it to be ready,

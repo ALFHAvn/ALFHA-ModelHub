@@ -5,6 +5,7 @@ import { ExecutionDetails } from './ExecutionDetails';
 import { History } from './History';
 import { ModelSelect } from './ModelSelect';
 import { ProposalReview } from './ProposalReview';
+import { RoutingPreview } from './RoutingPreview';
 
 const navigation = [
   { id: 'chat', label: 'Chat', icon: 'chat', description: 'Send a prompt to a configured model.' },
@@ -12,9 +13,10 @@ const navigation = [
   { id: 'review', label: 'Proposal & Review', icon: 'review', description: 'Ask one model to draft a response and a second model to review it.' },
   { id: 'history', label: 'History', icon: 'history', description: 'Review saved prompts, responses, and execution outcomes.' },
   { id: 'coding', label: 'Coding Cohorts', icon: 'coding', description: 'Compare saved Java benchmark results and inspect what happened in each run.' },
+  { id: 'routing', label: 'Routing Preview', icon: 'routing', description: 'See which model the basic routing policy recommends and why.' },
 ] as const;
 type Tab = typeof navigation[number]['id'];
-type IconName = 'logo' | 'chat' | 'compare' | 'review' | 'history' | 'coding' | 'refresh' | 'send';
+type IconName = 'logo' | 'chat' | 'compare' | 'review' | 'history' | 'coding' | 'routing' | 'refresh' | 'send';
 const paths: Record<IconName, ReactNode> = {
   logo: <><path d="m12 2 9 5v10l-9 5-9-5V7z"/><path d="m3 7 9 5 9-5m-9 5v10M7.5 4.5l9 5"/></>,
   chat: <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H4l1.5-4A7.5 7.5 0 1 1 20 11.5ZM8 11.5h8m-8 3h5"/>,
@@ -22,6 +24,7 @@ const paths: Record<IconName, ReactNode> = {
   review: <path d="M4 3h11l4 4v14H4zM14 3v5h5m-11 7 2 2 5-5"/>,
   history: <path d="M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5m4-1v5l3 2"/>,
   coding: <path d="M5 4h14v16H5zM10 8l-3 4 3 4m4-8 3 4-3 4"/>,
+  routing: <path d="M4 5h4v4H4zM16 3h4v4h-4zM16 17h4v4h-4zM8 7h3v12h5m-5-14h5"/>,
   refresh: <path d="M20 11a8 8 0 1 0-2.3 6M20 5v6h-6"/>,
   send: <path d="m22 2-7 20-4-9-9-4 20-7ZM22 2 11 13"/>,
 };
@@ -190,6 +193,7 @@ export function App() {
         <div hidden={tab !== 'review'}><ProposalReview models={models} online={online} /></div>
         {tab === 'history' && <History online={online} />}
         {tab === 'coding' && <CodingCohort online={online} refresh={refresh} />}
+        {tab === 'routing' && <RoutingPreview online={online} />}
       </div>
     </main>
   </div>;

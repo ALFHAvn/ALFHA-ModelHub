@@ -307,16 +307,26 @@ and benchmark requests retain their original payloads.
 Tests use fixture catalog responses and stub providers. Live enforcement of
 zero-valued limits and account-level billing behavior remain unverified.
 
-## Planned routing interface
+## Routing Preview in the web interface
 
-After the coding cohort report viewer, add a read-only **Routing Preview**
-page backed by `GET /api/routing/preview?profile=basic`. Show the selected
-model and reason, or clearly distinguish local fallback from no route.
-Show candidate metrics, sample sizes, evidence age, and exclusions alongside
-links to the saved reports. Explain how to enable preview if the backend
-returns 404 for the optional route.
+For the Windows launcher and Docker Compose, add these settings to the root
+`.env` and restart ModelHub. Use a UTC cutoff that matches the current
+deployment, and replace the example IDs with up to 20 approved Basics v2
+report IDs from the current database.
 
-Acceptance tests should cover evidence-backed selection, fallback, no route,
-disabled preview, and connection errors. Preview sends no task to a model.
-Routed generation can follow as a separate, explicit action once the
-decision and cloud controls are clear in the interface.
+```dotenv
+MODELHUB_ROUTING_PREVIEW_ENABLED=true
+MODELHUB_ROUTING_PREVIEW_CUTOFF=2026-11-06T00:00:00Z
+MODELHUB_ROUTING_PREVIEW_REPORT_IDS=<uuid1>,<uuid2>,<uuid3>
+```
+
+Open **Routing Preview** and select **Preview route**. It uses
+`GET /api/routing/preview?profile=basic` to display the recommendation,
+local fallback, or no-route outcome, together with candidate metrics,
+thresholds, evidence cutoff, and links to qualifying saved reports.
+Exclusions explain why other reports did not qualify. Empty evidence
+shows a fallback or no route according to the existing policy.
+
+The page reads on demand and sends no generation requests. The Compose
+settings above enable the preview only. Host deployments can use the
+[existing preview flags](#9b-preview).
