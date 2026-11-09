@@ -193,7 +193,7 @@ export function App() {
         <div hidden={tab !== 'review'}><ProposalReview models={models} online={online} /></div>
         {tab === 'history' && <History online={online} />}
         {tab === 'coding' && <CodingCohort online={online} refresh={refresh} />}
-        {tab === 'routing' && <RoutingPreview online={online} />}
+        <div hidden={tab !== 'routing'}><RoutingPreview online={online} /></div>
       </div>
     </main>
   </div>;

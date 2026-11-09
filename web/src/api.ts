@@ -93,6 +93,7 @@ export type RoutingDecision = {
   exclusions: { reportId: string | null; reason: string }[];
   candidates: RoutingCandidate[];
 };
+export type LocalRoutedResult = { decision: RoutingDecision; generation: Execution | null };
 
 const messages: Record<string, string> = {
   UNKNOWN_MODEL: 'This model is no longer configured. Refresh the model list and choose another.',
@@ -123,6 +124,9 @@ async function request<T>(path: string, init?: RequestInit, keepExecution = fals
   if (path === 'routing/preview?profile=basic' && response.status === 404) {
     throw new Error('Routing preview is unavailable on this backend. Set MODELHUB_ROUTING_PREVIEW_ENABLED=true in .env and restart ModelHub.');
   }
+  if (path === 'routing/generate-local' && response.status === 404) {
+    throw new Error('Local routed generation is unavailable. Use the updated backend and enable routing preview and generation in .env, then restart ModelHub.');
+  }
   let body;
   try {
     body = await response.json();
@@ -131,6 +135,9 @@ async function request<T>(path: string, init?: RequestInit, keepExecution = fals
   }
   // Generation returns a full execution even when its HTTP status indicates a provider failure.
   if (response.ok || (keepExecution && typeof body?.requestId === 'string')) return body as T;
+  if (path === 'routing/generate-local' && typeof body?.decision?.outcome === 'string' && 'generation' in body) {
+    return body as T;
+  }
   if (typeof body?.code === 'string' && typeof body?.message === 'string') {
     if (path.startsWith('benchmarks/') && body.code === 'NOT_FOUND') {
       throw new Error('The saved benchmark report could not be found. Choose a recent report or check its ID.');
@@ -171,4 +178,6 @@ export const api = {
     request<SavedBenchmarkReport>(`benchmarks/${encodeURIComponent(id)}`, { signal }),
   savedReportUrl: (id: string) => `/api/benchmarks/${encodeURIComponent(id)}`,
   routingPreview: (signal: AbortSignal) => request<RoutingDecision>('routing/preview?profile=basic', { signal }),
+  generateLocalRouted: (prompt: string) =>
+    request<LocalRoutedResult>('routing/generate-local', json({ profile: 'basic', prompt })),
 };

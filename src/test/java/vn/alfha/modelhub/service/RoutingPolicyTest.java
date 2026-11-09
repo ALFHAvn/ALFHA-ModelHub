@@ -160,6 +160,9 @@ class RoutingPolicyTest {
         var enabled = new RoutingPreview(catalog, repository, registry, LOCAL.timeout(), CLOUD.timeout(), ids,
                 completed.minusSeconds(60).toString(), false, true, pricing, scorer, new BenchmarkDeployment(""));
         assertEquals(LOCAL.model(), enabled.preview("basic").selectedModel());
+        var localOnly = enabled.dispatch("basic", false);
+        assertEquals(LOCAL.model(), localOnly.selectedModel());
+        assertEquals(List.of("CLOUD_DISPATCH_DISABLED"), localOnly.candidates().getLast().reasons());
         assertEquals(0, pricingCalls.get());
         assertEquals(CLOUD.model(), enabled.dispatch("basic").selectedModel());
         var repriced = enabled.dispatch("basic");

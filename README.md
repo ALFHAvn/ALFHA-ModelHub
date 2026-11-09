@@ -517,8 +517,14 @@ Open **Routing Preview** and select **Preview route** to see the basic
 profile's recommendation, fallback reason, and candidate evidence. Enable
 it with `MODELHUB_ROUTING_PREVIEW_ENABLED=true` in `.env`, then restart
 ModelHub. Set a cutoff and curated Basics v2 report IDs to evaluate saved
-evidence. The page sends no task to a model.
+evidence. **Preview route** sends no task to a model.
 [Preview setup and interpretation](docs/routing-design.md#routing-preview-in-the-web-interface)
+
+To submit a prompt through the local routing policy, also set
+`MODELHUB_ROUTING_GENERATION_ENABLED=true` and restart. Under **Routing
+Preview**, use **Generate locally**. The backend recalculates the route,
+shows the decision used for that request, and dispatches only to Ollama.
+[Local dispatch setup](docs/routing-design.md#local-dispatch-in-the-web-interface)
 
 ### Troubleshooting
 

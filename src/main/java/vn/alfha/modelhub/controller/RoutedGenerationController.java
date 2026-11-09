@@ -28,9 +28,18 @@ public class RoutedGenerationController {
 
     @PostMapping("/api/routing/generate")
     public ResponseEntity<Result> generate(@RequestBody Request request) {
+        return generate(request, true);
+    }
+
+    @PostMapping("/api/routing/generate-local")
+    public ResponseEntity<Result> generateLocal(@RequestBody Request request) {
+        return generate(request, false);
+    }
+
+    private ResponseEntity<Result> generate(Request request, boolean requestAllowsCloud) {
         if (!GenerationService.validPrompt(request.prompt()))
             throw new IllegalArgumentException("Provide a prompt of 1 to 32000 characters");
-        var decision = routing.dispatch(request.profile());
+        var decision = routing.dispatch(request.profile(), requestAllowsCloud);
         if (decision.selectedModel() == null) return ResponseEntity.status(503).body(new Result(decision, null));
         var result = generation.generateRouted(new GenerateRequest(decision.selectedModel(), request.prompt()));
         return ResponseEntity.status(GenerationController.status(result)).body(new Result(decision, result));

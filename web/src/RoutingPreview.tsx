@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { api, type RoutingCandidate, type RoutingDecision } from './api';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { api, type LocalRoutedResult, type RoutingCandidate, type RoutingDecision } from './api';
+import { ExecutionDetails } from './ExecutionDetails';
 
 const outcomeLabels: Record<RoutingDecision['outcome'], string> = {
   EVIDENCE_SELECTED: 'Evidence-backed selection', FALLBACK_LOCAL: 'Local fallback', NO_ROUTE: 'No route',
@@ -13,6 +14,7 @@ const reasons: Record<string, string> = {
   EVIDENCE_UNAVAILABLE: 'Saved benchmark evidence could not be read.',
   STALE_EVIDENCE: 'The benchmark evidence is too old.',
   CLOUD_NOT_VERIFIED: 'Cloud pricing has not been verified.',
+  CLOUD_DISPATCH_DISABLED: 'Cloud models are excluded from this dispatch.',
   INSUFFICIENT_REPORTS: 'Too few comparable reports or attempts.',
   INSUFFICIENT_SCORED: 'Too few attempts could be scored.',
   LOW_PROVIDER_RELIABILITY: 'Provider reliability was below the threshold.',
@@ -84,6 +86,59 @@ function DecisionDetails({ decision }: { decision: RoutingDecision }) {
   </>;
 }
 
+function LocalRoutedGeneration({ online }: { online: boolean }) {
+  const [prompt, setPrompt] = useState('');
+  const [result, setResult] = useState<LocalRoutedResult>();
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
+  const canSubmit = online && !busy && prompt.trim() && prompt.length <= 32000;
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSubmit || inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setError('');
+    setResult(undefined);
+    try {
+      setResult(await api.generateLocalRouted(prompt));
+    } catch (failure) {
+      setError((failure as Error).message);
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
+  return <section className="output" aria-label="Local routed generation">
+    <form className="card composer" onSubmit={submit} aria-busy={busy}>
+      <h2>Generate with a local route</h2>
+      <p className="cohort-note">The backend recalculates the route when you submit and sends your prompt only to a local model.</p>
+      <label className="field">
+        <span>Prompt for local routing</span>
+        <textarea value={prompt} onChange={event => setPrompt(event.target.value)} rows={4} maxLength={32000} disabled={busy} />
+      </label>
+      <div className="form-footer">
+        <span className="count">{prompt.length.toLocaleString()} / 32,000</span>
+        <button className="primary" type="submit" disabled={!canSubmit}>{busy ? 'Generating locally…' : 'Generate locally'}</button>
+      </div>
+    </form>
+    {busy && <p className="notice" role="status">Selecting a local route and waiting for the model…</p>}
+    {error && <p className="notice error" role="alert">{error}</p>}
+    {result && <div className="output card result routing-evidence">
+      <h3>Local dispatch result</h3>
+      <p><strong>{outcomeLabels[result.decision.outcome]}</strong>{result.decision.selectedModel && ` · ${result.decision.selectedModel}`}</p>
+      <p>{explain(result.decision.reason)}</p>
+      {result.generation ? <ExecutionDetails result={result.generation} /> : <p className="notice">No model was called.</p>}
+      <details>
+        <summary>Inspect dispatch evidence</summary>
+        <DecisionDetails decision={result.decision} />
+      </details>
+    </div>}
+  </section>;
+}
+
 export function RoutingPreview({ online }: { online: boolean }) {
   const [decision, setDecision] = useState<RoutingDecision>();
   const [error, setError] = useState('');
@@ -120,5 +175,6 @@ export function RoutingPreview({ online }: { online: boolean }) {
     {busy && <p className="notice" role="status">Checking routing evidence…</p>}
     {error && <p className="notice error" role="alert">{error}</p>}
     {decision && <DecisionDetails decision={decision} />}
+    <LocalRoutedGeneration online={online} />
   </>;
 }

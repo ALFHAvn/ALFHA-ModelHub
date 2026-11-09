@@ -75,6 +75,7 @@ class BenchmarkIT {
                     String base = base(context);
                     assertEquals(404, get(client, base + "/api/routing/preview?profile=basic").statusCode());
                     assertEquals(404, routed(client, base, "basic", "test").statusCode());
+                    assertEquals(404, routed(client, base, "basic", "test", true).statusCode());
                     assertEquals(503, coding(client, base).statusCode());
                     var emptyCodingReports = get(client, base + "/api/benchmarks/coding-reports");
                     assertEquals(200, emptyCodingReports.statusCode());
@@ -169,7 +170,7 @@ class BenchmarkIT {
                             mapper.writeValueAsString(legacy), legacy.path("id").asString());
                 }
                 boolean realCodingRunner = Boolean.getBoolean("modelhub.test.coding-docker");
-                String[] restartArgs = java.util.Arrays.copyOf(args, args.length + 5);
+                String[] restartArgs = java.util.Arrays.copyOf(args, args.length + 6);
                 restartArgs[args.length] = "--modelhub.coding.runner=" + (realCodingRunner
                         ? "scripts/run-java-coding-pilot.ps1" : "target/nonexistent-coding-runner.ps1");
                 String approvedId = mapper.readTree(reportJson).path("id").asString();
@@ -178,6 +179,7 @@ class BenchmarkIT {
                 restartArgs[args.length + 2] = "--modelhub.routing.preview.cutoff=2020-01-01T00:00:00Z";
                 restartArgs[args.length + 3] = "--modelhub.routing.preview.report-ids=" + approvedId + "," + missingId;
                 restartArgs[args.length + 4] = "--modelhub.routing.generation.enabled=true";
+                restartArgs[args.length + 5] = "--modelhub.routing.generation.allow-cloud=true";
                 try (var restarted = new SpringApplicationBuilder(ModelHubApplication.class).run(restartArgs);
                      var client = HttpClient.newHttpClient()) {
                     var retrieved = get(client, base(restarted) + reportPath);
@@ -245,10 +247,11 @@ class BenchmarkIT {
                     assertEquals(400, routed(client, routedBase, "basic", " ").statusCode());
                     assertEquals(400, routed(client, routedBase, "unknown", "test").statusCode());
                     assertEquals(callsBeforePreview, calls.get());
-                    var routed = routed(client, routedBase, "basic", "test");
+                    var routed = routed(client, routedBase, "basic", "test", true);
                     assertEquals(200, routed.statusCode(), routed.body());
                     var routedResult = mapper.readTree(routed.body());
                     assertEquals("FALLBACK_LOCAL", routedResult.path("decision").path("outcome").asString());
+                    assertEquals("basic-local-dispatch-v2", routedResult.path("decision").path("policyVersion").asString());
                     assertEquals("CLOUD_DISPATCH_DISABLED", routedResult.path("decision")
                             .path("candidates").path(1).path("reasons").path(0).asString());
                     assertEquals("qwen3:4b", routedResult.path("generation").path("model").asString());
@@ -261,6 +264,7 @@ class BenchmarkIT {
                         var failed = routed(client, routedBase, "basic", "test");
                         assertEquals(502, failed.statusCode(), failed.body());
                         var failedResult = mapper.readTree(failed.body());
+                        assertEquals("basic-cloud-allowed-dispatch-v2", failedResult.path("decision").path("policyVersion").asString());
                         assertEquals("qwen3:4b", failedResult.path("decision").path("selectedModel").asString());
                         assertEquals("FAILED", failedResult.path("generation").path("status").asString());
                         assertEquals(callsBeforePreview + 2, calls.get());
@@ -561,8 +565,11 @@ class BenchmarkIT {
                 .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
     }
     private HttpResponse<String> routed(HttpClient client, String base, String profile, String prompt) throws Exception {
+        return routed(client, base, profile, prompt, false);
+    }
+    private HttpResponse<String> routed(HttpClient client, String base, String profile, String prompt, boolean localOnly) throws Exception {
         String body = new ObjectMapper().writeValueAsString(java.util.Map.of("profile", profile, "prompt", prompt));
-        return client.send(HttpRequest.newBuilder(URI.create(base + "/api/routing/generate"))
+        return client.send(HttpRequest.newBuilder(URI.create(base + (localOnly ? "/api/routing/generate-local" : "/api/routing/generate")))
                 .timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
     }

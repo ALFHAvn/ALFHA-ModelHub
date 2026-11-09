@@ -327,6 +327,22 @@ thresholds, evidence cutoff, and links to qualifying saved reports.
 Exclusions explain why other reports did not qualify. Empty evidence
 shows a fallback or no route according to the existing policy.
 
-The page reads on demand and sends no generation requests. The Compose
-settings above enable the preview only. Host deployments can use the
+**Preview route** reads on demand and sends no generation requests. The
+Compose settings above enable the preview. Host deployments can use the
 [existing preview flags](#9b-preview).
+
+## Local dispatch in the web interface
+
+To enable the separate **Generate locally** action, set
+`MODELHUB_ROUTING_GENERATION_ENABLED=true` alongside
+`MODELHUB_ROUTING_PREVIEW_ENABLED=true` in the root `.env` and restart
+ModelHub. Enter a prompt in the local routing form and submit it explicitly.
+
+The browser calls `POST /api/routing/generate-local` with the same
+`profile` and `prompt` fields as the existing routed generation endpoint.
+It recalculates the route with local candidates only, even when the
+server allows cloud dispatch on the existing endpoint. The browser shows
+the actual dispatch decision and retains it when the local model returns
+an error. A no-route decision makes zero model calls. A recommendation
+from **Preview route** can differ from the actual local dispatch because
+the evidence is checked again and the local action excludes cloud models.

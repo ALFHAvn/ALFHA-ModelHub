@@ -74,8 +74,12 @@ public class RoutingPreview {
     }
 
     public RoutingPolicy.Decision dispatch(String profile) {
-        return decide(profile, allowCloudDispatch ? Mode.CLOUD_ALLOWED_DISPATCH : Mode.LOCAL_DISPATCH,
-                allowCloudDispatch);
+        return dispatch(profile, true);
+    }
+
+    public RoutingPolicy.Decision dispatch(String profile, boolean requestAllowsCloud) {
+        boolean checkCloud = allowCloudDispatch && requestAllowsCloud;
+        return decide(profile, checkCloud ? Mode.CLOUD_ALLOWED_DISPATCH : Mode.LOCAL_DISPATCH, checkCloud);
     }
 
     private RoutingPolicy.Decision decide(String profile, Mode mode, boolean checkPricing) {
