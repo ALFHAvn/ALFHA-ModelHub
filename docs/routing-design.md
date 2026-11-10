@@ -346,3 +346,31 @@ the actual dispatch decision and retains it when the local model returns
 an error. A no-route decision makes zero model calls. A recommendation
 from **Preview route** can differ from the actual local dispatch because
 the evidence is checked again and the local action excludes cloud models.
+
+## Local-only evidence verification
+
+The `basic-preview-v2` policy requires exactly two eligible routing candidates
+and a complete paired report for that roster. With `OPENROUTER_ENABLED=false`,
+the current registry offers only its primary Ollama model to routing.
+`OLLAMA_SECONDARY_MODEL` adds an explicit model choice without expanding
+the routing roster. Three complete single-model reports would each fail
+the compatibility gate with `CONFIGURATION_MISMATCH`.
+
+On 11 November 2026 (Vietnam time), the running Compose app exposed
+`basics` v2 with all 10 tasks and `qwen3:4b` as the only configured model.
+Setting `MODELHUB_ROUTING_PREVIEW_CUTOFF=2026-11-10T18:08:48Z` changed
+the live preview from `CUTOFF_REQUIRED` to `NO_EVIDENCE`. It returned
+`FALLBACK_LOCAL` and selected `qwen3:4b`. PostgreSQL retained zero reports
+and four existing execution records. The routing, catalog, and benchmark
+service tests passed (21 tests). This verification made no model calls.
+
+For a separate local baseline, keep the installed model digest, Ollama
+version, timeout, and deployment stable. Submit three sequential
+`POST /api/benchmarks` requests with
+`{"datasetId":"basics","datasetVersion":"2","models":["qwen3:4b"]}`.
+Each report should contain one attempt for each of the 10 task IDs, and all
+30 execution IDs should be unique and match the saved execution history.
+Verify the saved dataset snapshot, hash, and `objective-v1` scores. Keep
+the genuine reports in PostgreSQL. This measures repeatability. Routing
+acceptance requires a policy that supports local-only evidence before
+those reports can be considered.
