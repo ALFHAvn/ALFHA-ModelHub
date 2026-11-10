@@ -41,7 +41,8 @@ public class RoutedGenerationController {
             throw new IllegalArgumentException("Provide a prompt of 1 to 32000 characters");
         var decision = routing.dispatch(request.profile(), requestAllowsCloud);
         if (decision.selectedModel() == null) return ResponseEntity.status(503).body(new Result(decision, null));
-        var result = generation.generateRouted(new GenerateRequest(decision.selectedModel(), request.prompt()));
+        var input = new GenerateRequest(decision.selectedModel(), request.prompt());
+        var result = generation.generateRoutingDispatch(input, requestAllowsCloud);
         return ResponseEntity.status(GenerationController.status(result)).body(new Result(decision, result));
     }
 }

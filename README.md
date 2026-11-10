@@ -160,7 +160,7 @@ The application never downloads models automatically.
 | --- | --- | --- |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Trusted Ollama server origin |
 | `OLLAMA_MODEL` | `qwen3:4b` | Configured local model identifier |
-| `OLLAMA_SECONDARY_MODEL` | Empty | Optional second installed Ollama model for explicit selection |
+| `OLLAMA_SECONDARY_MODEL` | Empty | Optional second installed Ollama model for explicit selection and opt-in local-pair routing |
 | `OLLAMA_TIMEOUT` | `120s` | Positive connection and complete request timeout |
 
 ```powershell
@@ -525,6 +525,11 @@ To submit a prompt through the local routing policy, also set
 Preview**, use **Generate locally**. The backend recalculates the route,
 shows the decision used for that request, and dispatches only to Ollama.
 [Local dispatch setup](docs/routing-design.md#local-dispatch-in-the-web-interface)
+
+To route between two installed Ollama models, set
+`OLLAMA_SECONDARY_MODEL` and `MODELHUB_ROUTING_LOCAL_PAIR_ENABLED=true`.
+Verify the roster in **Routing Preview** before collecting evidence.
+[Two-model routing setup](docs/routing-design.md#two-model-ollama-routing)
 
 ### Troubleshooting
 

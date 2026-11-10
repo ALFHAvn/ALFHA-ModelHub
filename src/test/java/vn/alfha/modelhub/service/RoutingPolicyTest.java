@@ -27,6 +27,7 @@ class RoutingPolicyTest {
     private static final Instant NOW = Instant.parse("2026-11-06T00:00:00Z");
     private static final Instant CUTOFF = Instant.parse("2026-10-01T00:00:00Z");
     private static final Candidate LOCAL = new Candidate("qwen3:4b", "ollama", "120s");
+    private static final Candidate SECONDARY = new Candidate("qwen2.5-coder:3b", "ollama", "120s");
     private static final Candidate CLOUD = new Candidate("vendor/model:free", "openrouter", "120s");
     private final BenchmarkCatalog catalog;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -190,6 +191,61 @@ class RoutingPolicyTest {
         }
     }
 
+    @Test void localPairOptInKeepsExplicitModelsAndPrimaryFallback() {
+        var ollama = new OllamaProvider(mapper, URI.create("http://localhost:1"), Duration.ofSeconds(1));
+        var cloud = new OpenRouterProvider(mapper, URI.create("http://localhost:1/chat"), Duration.ofSeconds(1), "");
+        var legacy = new ModelRegistry(ollama, cloud, LOCAL.model(), false, "", SECONDARY.model());
+        var localPair = new ModelRegistry(ollama, cloud, LOCAL.model(), false, "", SECONDARY.model(), true);
+        assertEquals(legacy.models(), localPair.models());
+        assertEquals(List.of(LOCAL.model()), legacy.routingModels().stream().map(ModelRegistry.ConfiguredModel::model).toList());
+        assertEquals(List.of(LOCAL.model(), SECONDARY.model()), localPair.routingModels().stream().map(ModelRegistry.ConfiguredModel::model).toList());
+        assertSame(ollama, localPair.provider(SECONDARY.model()));
+        assertThrows(IllegalArgumentException.class, () -> new ModelRegistry(ollama, cloud, LOCAL.model(), false, "", "", true));
+        assertThrows(IllegalArgumentException.class, () -> new ModelRegistry(ollama, cloud, LOCAL.model(), false, "", LOCAL.model(), true));
+        assertEquals(LOCAL.model(), preview(List.of(LOCAL, SECONDARY), List.of()).selectedModel());
+        var fallback = preview(List.of(LOCAL), List.of());
+        assertEquals("FALLBACK_LOCAL", fallback.outcome());
+        assertEquals("NO_EVIDENCE", fallback.reason());
+        assertEquals(LOCAL.model(), fallback.selectedModel());
+    }
+
+    @Test void localPairQualifiesOnlyWithCompleteEvidenceForItsExactRoster() {
+        var completed = Instant.now().minusSeconds(15);
+        var paired = List.of(report(1, completed, 0, SECONDARY), report(2, completed, 0, SECONDARY),
+                report(3, completed, 0, SECONDARY));
+        var otherRoster = report(4, completed, 0);
+        var partial = report(5, completed, 0, SECONDARY);
+        var single = copy(partial, partial.id(), completed, partial.datasetSha256(), partial.scoringVersion(), null,
+                List.of(config(LOCAL)), partial.results().stream().filter(r -> r.execution().model().equals(LOCAL.model())).toList());
+        var reports = new ArrayList<>(paired);
+        reports.add(otherRoster);
+        reports.add(single);
+        var repository = new BenchmarkRepository(null, mapper) {
+            @Override public Optional<BenchmarkReport> find(UUID id) {
+                return reports.stream().filter(report -> id.equals(report.id())).findFirst();
+            }
+        };
+        var ollama = new OllamaProvider(mapper, URI.create("http://localhost:1"), Duration.ofSeconds(1));
+        var cloud = new OpenRouterProvider(mapper, URI.create("http://localhost:1/chat"), Duration.ofSeconds(1), "");
+        var registry = new ModelRegistry(ollama, cloud, LOCAL.model(), true, CLOUD.model(), SECONDARY.model(), true);
+        assertSame(cloud, registry.provider(CLOUD.model()));
+        var pricing = new OpenRouterPricing(mapper, OpenRouterProvider.OFFICIAL_ENDPOINT,
+                () -> fail("Local-pair routing must not look up cloud pricing"));
+        String ids = String.join(",", reports.stream().map(report -> report.id().toString()).toList());
+        var routing = new RoutingPreview(catalog, repository, registry, LOCAL.timeout(), CLOUD.timeout(), ids,
+                completed.minusSeconds(60).toString(), true, true, pricing, scorer, new BenchmarkDeployment(""));
+        var preview = routing.preview("basic");
+        assertEquals("EVIDENCE_SELECTED", preview.outcome());
+        assertEquals(SECONDARY.model(), preview.selectedModel());
+        assertEquals(paired.stream().map(BenchmarkReport::id).toList(), preview.reportIds());
+        assertEquals(List.of(new Exclusion(otherRoster.id(), "CONFIGURATION_MISMATCH"),
+                new Exclusion(single.id(), "CONFIGURATION_MISMATCH")), preview.exclusions());
+        assertTrue(preview.candidates().stream().allMatch(candidate ->
+                "ollama".equals(candidate.provider()) && candidate.metrics().attempted() == 30));
+        assertEquals(SECONDARY.model(), routing.dispatch("basic", false).selectedModel());
+        assertEquals(SECONDARY.model(), routing.dispatch("basic").selectedModel());
+    }
+
     private Candidate checked(OpenRouterPricing.Check check) {
         return new Candidate(CLOUD.model(), CLOUD.provider(), CLOUD.timeout(), check);
     }
@@ -211,6 +267,10 @@ class RoutingPolicyTest {
     }
 
     private BenchmarkReport report(int id, Instant completed, int failures) {
+        return report(id, completed, failures, CLOUD);
+    }
+
+    private BenchmarkReport report(int id, Instant completed, int failures, Candidate second) {
         var dataset = catalog.dataset("2");
         var results = new ArrayList<Result>();
         for (int i = 0; i < dataset.tasks().size(); i++) {
@@ -225,14 +285,14 @@ class RoutingPolicyTest {
             var local = new GenerateResponse(new UUID(id, i * 2L), LOCAL.model(), i == 0 ? "wrong" : answer,
                     10 + i, "SUCCESS", null);
             boolean failed = i < failures;
-            var cloud = new GenerateResponse(new UUID(id, i * 2L + 1), CLOUD.model(), failed ? null : answer,
+            var other = new GenerateResponse(new UUID(id, i * 2L + 1), second.model(), failed ? null : answer,
                     failed ? 9000 : 2, failed ? "FAILED" : "SUCCESS",
                     failed ? new ApiError("RATE_LIMITED", "limited") : null);
             results.add(new Result(taskId, local, i == 0 ? "FAIL" : "PASS", List.of(local), null));
-            results.add(new Result(taskId, cloud, failed ? "NOT_SCORED" : "PASS", List.of(cloud), null));
+            results.add(new Result(taskId, other, failed ? "NOT_SCORED" : "PASS", List.of(other), null));
         }
         return new BenchmarkReport(new UUID(0, id), completed.minusSeconds(10), completed, catalog.hash("2"),
-                "objective-v1", dataset, List.of(config(LOCAL), config(CLOUD)), results, List.of(), null, List.of(), null);
+                "objective-v1", dataset, List.of(config(LOCAL), config(second)), results, List.of(), null, List.of(), null);
     }
 
     private ModelConfig config(Candidate candidate) {

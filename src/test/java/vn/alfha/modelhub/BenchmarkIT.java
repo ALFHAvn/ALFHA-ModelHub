@@ -33,9 +33,12 @@ class BenchmarkIT {
             var cloudStarts = new java.util.concurrent.CopyOnWriteArrayList<Long>();
             var localAnswer = new java.util.concurrent.atomic.AtomicReference<>("42");
             var localStatus = new java.util.concurrent.atomic.AtomicInteger(200);
+            var remoteOllamaModel = new java.util.concurrent.atomic.AtomicBoolean();
             var mapper = new ObjectMapper();
             stub.createContext("/api/tags", exchange -> {
-                byte[] bytes = "{\"models\":[{\"name\":\"qwen3:4b\"}]}".getBytes(StandardCharsets.UTF_8);
+                byte[] bytes = (remoteOllamaModel.get()
+                        ? "{\"models\":[{\"name\":\"qwen3:4b\",\"remote_model\":\"remote-model\"}]}"
+                        : "{\"models\":[{\"name\":\"qwen3:4b\"}]}").getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(200, bytes.length);
                 exchange.getResponseBody().write(bytes);
                 exchange.close();
@@ -270,6 +273,16 @@ class BenchmarkIT {
                         assertEquals(callsBeforePreview + 2, calls.get());
                     } finally {
                         localStatus.set(200);
+                    }
+                    remoteOllamaModel.set(true);
+                    try {
+                        var rejected = routed(client, routedBase, "basic", "test", true);
+                        assertEquals(503, rejected.statusCode(), rejected.body());
+                        assertEquals("CONFIGURATION_ERROR",
+                                mapper.readTree(rejected.body()).path("generation").path("error").path("code").asString());
+                        assertEquals(callsBeforePreview + 2, calls.get());
+                    } finally {
+                        remoteOllamaModel.set(false);
                     }
                     assertEquals(1L, jdbc.queryForObject("SELECT count(*) FROM execution_runs WHERE model='legacy-model'", Long.class));
                     localAnswer.set("""

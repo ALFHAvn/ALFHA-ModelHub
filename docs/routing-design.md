@@ -347,14 +347,69 @@ an error. A no-route decision makes zero model calls. A recommendation
 from **Preview route** can differ from the actual local dispatch because
 the evidence is checked again and the local action excludes cloud models.
 
-## Local-only evidence verification
+## Two-model Ollama routing
+
+The default routing roster is the primary Ollama model and, if enabled,
+the configured OpenRouter model. To use two local routing candidates, run
+`ollama list` and choose two distinct, already installed model IDs. In the
+root `.env`, use these settings and substitute the actual secondary ID.
+
+```dotenv
+OLLAMA_MODEL=qwen3:4b
+OLLAMA_SECONDARY_MODEL=<installed-secondary-id>
+OPENROUTER_ENABLED=false
+MODELHUB_ROUTING_LOCAL_PAIR_ENABLED=true
+MODELHUB_ROUTING_PREVIEW_ENABLED=true
+MODELHUB_ROUTING_GENERATION_ENABLED=true
+MODELHUB_ROUTING_PREVIEW_REPORT_IDS=
+```
+
+Before collecting evidence, use PowerShell to print a cutoff and add the
+result to `.env`.
+
+```powershell
+"MODELHUB_ROUTING_PREVIEW_CUTOFF=$([DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ss'Z'"))"
+```
+
+Run **Start-ModelHub.cmd** to apply the settings. In **Routing Preview**,
+confirm that both candidate IDs appear as
+Ollama models and that the primary remains the fallback before evidence is
+available. The local-pair setting affects only the routing roster. Explicit
+model selection continues to list all configured models. If OpenRouter is
+enabled separately, it stays outside the local-pair roster.
+
+Submit three sequential requests to `POST /api/benchmarks` with the body
+below, replacing the placeholder with the same exact ID. Leave the schedule
+omitted and wait for each report before starting the next. The benchmark
+runner can submit the two models concurrently for each task.
+
+```json
+{"datasetId":"basics","datasetVersion":"2","models":["qwen3:4b","<installed-secondary-id>"]}
+```
+
+Check that each saved report has 20 results covering the same 10 tasks for
+both models, one attempt per result, and unique execution IDs across all
+three reports. Keep the runtime, model digests, timeout, and deployment
+stable. The policy still verifies roster compatibility, the dataset and
+scorer, cutoff, 14-day freshness, and saved answers. Each candidate still
+needs 30 attempts, at least 24 scored responses, and 80% provider reliability.
+
+Put the three saved report IDs in `MODELHUB_ROUTING_PREVIEW_REPORT_IDS` as a
+comma-separated list and restart ModelHub. Choose **Preview route** and check
+for `EVIDENCE_SELECTED` and the three qualifying report IDs. Then use
+**Generate locally** to verify the decision on a real prompt. Routed Ollama
+generation checks the configured server's inventory before dispatch and
+rejects missing, ambiguous, or remote entries. It does not pull models.
+
+## Local-only evidence verification before local-pair opt-in
 
 The `basic-preview-v2` policy requires exactly two eligible routing candidates
-and a complete paired report for that roster. With `OPENROUTER_ENABLED=false`,
-the current registry offers only its primary Ollama model to routing.
-`OLLAMA_SECONDARY_MODEL` adds an explicit model choice without expanding
-the routing roster. Three complete single-model reports would each fail
-the compatibility gate with `CONFIGURATION_MISMATCH`.
+and a complete paired report for that roster. Before the local-pair option,
+with `OPENROUTER_ENABLED=false` the registry offered only its primary Ollama
+model to routing.
+Three complete single-model reports would each fail the compatibility gate
+with `CONFIGURATION_MISMATCH`, which still applies to single-model reports
+with local-pair routing enabled.
 
 On 11 November 2026 (Vietnam time), the running Compose app exposed
 `basics` v2 with all 10 tasks and `qwen3:4b` as the only configured model.
@@ -371,6 +426,5 @@ version, timeout, and deployment stable. Submit three sequential
 Each report should contain one attempt for each of the 10 task IDs, and all
 30 execution IDs should be unique and match the saved execution history.
 Verify the saved dataset snapshot, hash, and `objective-v1` scores. Keep
-the genuine reports in PostgreSQL. This measures repeatability. Routing
-acceptance requires a policy that supports local-only evidence before
-those reports can be considered.
+the genuine reports in PostgreSQL. This measures repeatability for one
+model. The local-pair roster requires the paired collection above.

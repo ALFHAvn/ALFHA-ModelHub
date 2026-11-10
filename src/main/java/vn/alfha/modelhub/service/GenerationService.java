@@ -62,6 +62,11 @@ public class GenerationService {
     public GenerateResponse generateRouted(GenerateRequest request) {
         return generate(request, true);
     }
+    public GenerateResponse generateRoutingDispatch(GenerateRequest request, boolean requestAllowsCloud) {
+        if (!requestAllowsCloud || providers.apply(request.model()) instanceof OllamaProvider)
+            return generateInstalledRaw(request);
+        return generateRouted(request);
+    }
     public GenerateResponse generateJson(JsonGenerateRequest request) {
         var input = new GenerateRequest(request.model(), request.prompt());
         validate(input);

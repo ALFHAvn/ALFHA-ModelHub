@@ -21,23 +21,34 @@ public class ModelRegistry {
             @Value("${modelhub.ollama.model}") String localModel,
             @Value("${modelhub.openrouter.enabled}") boolean cloudEnabled,
             @Value("${modelhub.openrouter.model}") String cloudModel,
-            @Value("${modelhub.ollama.secondary-model:}") String secondaryModel) {
+            @Value("${modelhub.ollama.secondary-model:}") String secondaryModel,
+            @Value("${modelhub.routing.local-pair.enabled:false}") boolean localPairEnabled) {
         if (localModel.isBlank()) throw new IllegalArgumentException("Local model must not be blank");
         if (cloudEnabled && (!OpenRouterProvider.isFreeModel(cloudModel) || localModel.equals(cloudModel)))
             throw new IllegalArgumentException("Configure a distinct free OpenRouter model");
-        routingModels = cloudEnabled ? List.of(new ConfiguredModel(localModel, "ollama"), new ConfiguredModel(cloudModel, "openrouter"))
-                : List.of(new ConfiguredModel(localModel, "ollama"));
-        var configured = new ArrayList<>(routingModels);
+        var primary = new ConfiguredModel(localModel, "ollama");
+        var secondary = secondaryModel.isBlank() ? null : new ConfiguredModel(secondaryModel, "ollama");
+        if (localPairEnabled && secondary == null)
+            throw new IllegalArgumentException("Local-pair routing requires a distinct secondary Ollama model");
+        var defaultRouting = cloudEnabled ? List.of(primary, new ConfiguredModel(cloudModel, "openrouter"))
+                : List.of(primary);
+        var configured = new ArrayList<>(defaultRouting);
         var adapters = new HashMap<String, ModelProvider>();
         adapters.put(localModel, ollama);
         if (cloudEnabled) adapters.put(cloudModel, openRouter);
-        if (!secondaryModel.isBlank()) {
+        if (secondary != null) {
             if (adapters.putIfAbsent(secondaryModel, ollama) != null)
                 throw new IllegalArgumentException("Configure a distinct secondary Ollama model");
-            configured.add(new ConfiguredModel(secondaryModel, "ollama"));
+            configured.add(secondary);
         }
         providers = Map.copyOf(adapters);
         models = List.copyOf(configured);
+        routingModels = localPairEnabled ? List.of(primary, secondary) : defaultRouting;
+    }
+
+    public ModelRegistry(OllamaProvider ollama, OpenRouterProvider openRouter, String localModel,
+            boolean cloudEnabled, String cloudModel, String secondaryModel) {
+        this(ollama, openRouter, localModel, cloudEnabled, cloudModel, secondaryModel, false);
     }
 
     public ModelRegistry(OllamaProvider ollama, OpenRouterProvider openRouter, String localModel,

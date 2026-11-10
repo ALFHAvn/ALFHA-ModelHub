@@ -92,7 +92,8 @@ public final class RoutingPolicy {
         String reason = eligible.size() == 1 ? "ONLY_ELIGIBLE_CANDIDATE" : "CORRECTNESS_BAND_THEN_LATENCY";
         String model;
         if (selected == null) {
-            model = candidates.stream().filter(Candidate::local).map(Candidate::model).findFirst().orElse(null);
+            // The registry puts its configured primary before any secondary.
+            model = configured.stream().filter(Candidate::local).map(Candidate::model).findFirst().orElse(null);
             outcome = model == null ? "NO_ROUTE" : "FALLBACK_LOCAL";
             reason = fallbackReason(cutoff, reports, valid, exclusions);
         } else {
