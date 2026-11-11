@@ -428,3 +428,35 @@ Each report should contain one attempt for each of the 10 task IDs, and all
 Verify the saved dataset snapshot, hash, and `objective-v1` scores. Keep
 the genuine reports in PostgreSQL. This measures repeatability for one
 model. The local-pair roster requires the paired collection above.
+
+## Live two-model verification on 11 November 2026
+
+The Compose deployment at `ad55458` used Ollama 0.40.16, a 120-second
+timeout, and a UTC evidence cutoff of `2026-11-11T16:21:28Z`. Three sequential,
+unpaced Basics v2 reports each covered both installed models and all 10 tasks.
+The model digests and Ollama version matched before and after collection.
+All 60 execution IDs were unique. The saved rows matched PostgreSQL history
+for the prompt, model, response, status, error, and duration.
+
+| Model | Correct per report | Correct overall | Provider reliability | Median scored latency |
+| --- | --- | --- | --- | --- |
+| `qwen3:4b` | 10/10, 10/10, 10/10 | 30/30 | 30/30 | 15,051.5 ms |
+| `qwen2.5-coder:3b-instruct-q4_K_M` | 5/10, 5/10, 5/10 | 15/30 | 30/30 | 8,051.5 ms |
+
+Routing Preview accepted all three reports with zero exclusions and returned
+`EVIDENCE_SELECTED` for `qwen3:4b` with
+`CORRECTNESS_BAND_THEN_LATENCY`. The 3B model fell outside the five-point
+correctness band. A single local dispatch returned `37` for the prompt
+“What is 14 + 23? Reply with only the number.” The selected model and decision
+reason matched Preview. The API recorded 12,065 ms, and the response and
+execution metadata matched the saved history entry.
+
+PostgreSQL holds the three reports, and the active local configuration
+references their IDs. Exact API responses and verification metadata are
+archived locally under `target/routing-live-20261111T162245Z`. The evaluation
+repeats the same 10 tasks on one host. The benchmark can run both models
+concurrently for a task, so its latencies describe this paired workload.
+
+After collection and dispatch, Maven verification passed all 63 backend
+tests, including the PostgreSQL and restricted grading integration tests.
+The frontend suite passed all 21 tests.
