@@ -11,6 +11,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
+import vn.alfha.modelhub.controller.RoutedGenerationController;
 import vn.alfha.modelhub.dto.ApiError;
 import vn.alfha.modelhub.dto.BenchmarkReport;
 import vn.alfha.modelhub.dto.BenchmarkReport.ModelConfig;
@@ -225,7 +226,13 @@ class RoutingPolicyTest {
                 return reports.stream().filter(report -> id.equals(report.id())).findFirst();
             }
         };
-        var ollama = new OllamaProvider(mapper, URI.create("http://localhost:1"), Duration.ofSeconds(1));
+        var ollama = new OllamaProvider(mapper, URI.create("http://localhost:1"), Duration.ofSeconds(1)) {
+            @Override public String generateInstalledRaw(String model, String prompt) {
+                assertEquals(SECONDARY.model(), model);
+                assertEquals("integration task", prompt);
+                return "fixture response";
+            }
+        };
         var cloud = new OpenRouterProvider(mapper, URI.create("http://localhost:1/chat"), Duration.ofSeconds(1), "");
         var registry = new ModelRegistry(ollama, cloud, LOCAL.model(), true, CLOUD.model(), SECONDARY.model(), true);
         assertSame(cloud, registry.provider(CLOUD.model()));
@@ -244,6 +251,15 @@ class RoutingPolicyTest {
                 "ollama".equals(candidate.provider()) && candidate.metrics().attempted() == 30));
         assertEquals(SECONDARY.model(), routing.dispatch("basic", false).selectedModel());
         assertEquals(SECONDARY.model(), routing.dispatch("basic").selectedModel());
+        var controller = new RoutedGenerationController(routing, new GenerationService(registry, null));
+        var result = controller.generateLocal(new RoutedGenerationController.Request("basic", "integration task"));
+        assertEquals(200, result.getStatusCode().value());
+        var body = result.getBody();
+        assertNotNull(body);
+        assertEquals("EVIDENCE_SELECTED", body.decision().outcome());
+        assertEquals(SECONDARY.model(), body.generation().model());
+        assertEquals("fixture response", body.generation().response());
+        assertNotNull(body.generation().requestId());
     }
 
     private Candidate checked(OpenRouterPricing.Check check) {

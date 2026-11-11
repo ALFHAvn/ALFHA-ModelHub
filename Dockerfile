@@ -20,6 +20,7 @@ RUN apk add --no-cache curl && addgroup -S modelhub && adduser -S -G modelhub mo
 WORKDIR /app
 COPY --from=build --chown=modelhub:modelhub /workspace/target/modelhub-0.4.0.jar app.jar
 USER modelhub
+ENV SERVER_ADDRESS=0.0.0.0
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=6 CMD curl --fail --silent http://localhost:8080/api/health || exit 1
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

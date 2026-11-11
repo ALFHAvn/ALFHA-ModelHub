@@ -92,7 +92,7 @@ public class GenerationService {
         throw new IllegalArgumentException("This mode requires an Ollama model");
     }
 
-    GenerateResponse generateInstalledRaw(GenerateRequest input) {
+    public GenerateResponse generateInstalledRaw(GenerateRequest input) {
         validate(input);
         var ollama = requireOllama(input.model());
         return execute(input, () -> ollama.generateInstalledRaw(input.model(), input.prompt()), response -> true);

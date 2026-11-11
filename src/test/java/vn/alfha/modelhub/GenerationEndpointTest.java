@@ -6,6 +6,9 @@ import java.net.http.*;
 import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -16,6 +19,113 @@ import tools.jackson.databind.JsonNode;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GenerationEndpointTest {
+    @Test void localIntegrationValidatesInventoryAndKeepsFailuresAndRoutingMetadata() throws Exception {
+        var mapper = new ObjectMapper();
+        var payload = new AtomicReference<JsonNode>();
+        var inventory = new AtomicReference<>("""
+                {"models":[{"name":"qwen3:4b"},{"name":"proxied","remote_model":"upstream"}]}
+                """);
+        var calls = new AtomicInteger();
+        var releaseTimeout = new CountDownLatch(1);
+        String output = "{\"tool\":\"docker\",\"arguments\":{}}";
+        var stub = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        stub.createContext("/api/tags", exchange -> send(exchange, 200, inventory.get()));
+        stub.createContext("/api/generate", exchange -> {
+            calls.incrementAndGet();
+            var request = mapper.readTree(exchange.getRequestBody().readAllBytes());
+            payload.set(request);
+            if (request.path("prompt").asString().equals("slow")) {
+                try {
+                    releaseTimeout.await(10, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    exchange.close();
+                }
+                return;
+            }
+            send(exchange, 200, mapper.writeValueAsString(Map.of("response", output, "done", true)));
+        });
+        stub.start();
+        try (var context = new SpringApplicationBuilder(ModelHubApplication.class).run("--server.port=0",
+                "--modelhub.ollama.base-url=http://127.0.0.1:" + stub.getAddress().getPort(),
+                "--modelhub.ollama.model=qwen3:4b", "--modelhub.ollama.secondary-model=proxied",
+                "--modelhub.ollama.timeout=1s", "--modelhub.openrouter.enabled=false",
+                "--modelhub.routing.preview.enabled=true", "--modelhub.routing.generation.enabled=true");
+             var client = HttpClient.newHttpClient()) {
+            int port = ((ServletWebServerApplicationContext) context).getWebServer().getPort();
+            String explicitPath = "/api/generate/local";
+            String routedPath = "/api/routing/generate-local";
+            String explicit = """
+                    {"model":"qwen3:4b","prompt":"test"}
+                    """;
+            String routed = """
+                    {"profile":"basic","prompt":"test"}
+                    """;
+            assertEquals("127.0.0.1", context.getEnvironment().getProperty("server.address"));
+            assertError(mapper, post(client, port, explicitPath, "{}"), 400, "INVALID_INPUT");
+            assertError(mapper, post(client, port, routedPath, routed.replace("basic", "other")), 400, "INVALID_INPUT");
+            assertError(mapper, post(client, port, explicitPath, explicit.replace("qwen3:4b", "openrouter/free")),
+                    400, "UNKNOWN_MODEL");
+            assertEquals(0, calls.get());
+
+            var success = post(client, port, explicitPath, explicit);
+            assertEquals(200, success.statusCode(), success.body());
+            var first = mapper.readTree(success.body());
+            UUID firstId = assertSuccess(first, output);
+            assertEquals(mapper.readTree("""
+                    {"model":"qwen3:4b","prompt":"test","stream":false}
+                    """), payload.get());
+
+            var fallback = post(client, port, routedPath, routed);
+            assertEquals(200, fallback.statusCode(), fallback.body());
+            var routedResult = mapper.readTree(fallback.body());
+            var decision = routedResult.path("decision");
+            assertEquals("FALLBACK_LOCAL", decision.path("outcome").asString());
+            assertEquals("CUTOFF_REQUIRED", decision.path("reason").asString());
+            assertEquals("qwen3:4b", decision.path("selectedModel").asString());
+            assertNotEquals(firstId, assertSuccess(routedResult.path("generation"), output));
+
+            var proxy = post(client, port, explicitPath, explicit.replace("qwen3:4b", "proxied"));
+            assertEquals(503, proxy.statusCode(), proxy.body());
+            assertEquals("CONFIGURATION_ERROR", mapper.readTree(proxy.body()).path("error").path("code").asString());
+            inventory.set("{\"models\":[]}");
+            var missing = post(client, port, routedPath, routed);
+            assertEquals(503, missing.statusCode(), missing.body());
+            assertEquals("CONFIGURATION_ERROR", mapper.readTree(missing.body())
+                    .path("generation").path("error").path("code").asString());
+            assertEquals(2, calls.get());
+
+            inventory.set("{\"models\":[{\"name\":\"qwen3:4b\"}]}");
+            var timeout = post(client, port, explicitPath, explicit.replace("test", "slow"));
+            assertEquals(504, timeout.statusCode(), timeout.body());
+            var failed = mapper.readTree(timeout.body());
+            assertEquals("TIMEOUT", failed.path("error").path("code").asString());
+            assertEquals("FAILED", failed.path("status").asString());
+            assertTrue(failed.path("response").isNull());
+            assertNotEquals(firstId, UUID.fromString(failed.path("requestId").asString()));
+            assertEquals(3, calls.get());
+        } finally {
+            releaseTimeout.countDown();
+            stub.stop(0);
+        }
+    }
+
+    private void assertError(ObjectMapper mapper, HttpResponse<String> response, int status, String code) {
+        assertEquals(status, response.statusCode(), response.body());
+        assertEquals(code, mapper.readTree(response.body()).path("code").asString());
+    }
+
+    private UUID assertSuccess(JsonNode execution, String output) {
+        assertEquals("SUCCESS", execution.path("status").asString());
+        assertEquals("qwen3:4b", execution.path("model").asString());
+        assertEquals(output, execution.path("response").asString());
+        assertTrue(execution.path("durationMs").isIntegralNumber());
+        assertTrue(execution.path("durationMs").asLong() >= 0);
+        assertTrue(execution.path("error").isNull());
+        return UUID.fromString(execution.path("requestId").asString());
+    }
+
     @Test void validatesRequestsAndMapsProviderResultsOverHttp() throws Exception {
         var stub = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
         stub.createContext("/api/generate", exchange -> {

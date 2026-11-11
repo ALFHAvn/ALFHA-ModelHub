@@ -14,6 +14,11 @@ public class GenerationController {
         var result = service.generate(request);
         return ResponseEntity.status(status(result)).body(result);
     }
+    @PostMapping("/api/generate/local")
+    public ResponseEntity<GenerateResponse> generateLocal(@RequestBody GenerateRequest request) {
+        var result = service.generateInstalledRaw(request);
+        return ResponseEntity.status(status(result)).body(result);
+    }
     @PostMapping("/api/generate/json")
     public ResponseEntity<GenerateResponse> generateJson(@RequestBody JsonGenerateRequest request) {
         var result = service.generateJson(request);

@@ -54,6 +54,32 @@ try {
     $started = @(docker @compose ps --quiet app db | Sort-Object)
     Assert-Launcher ($started.Count -eq 2) 'Expected one app and one database container.'
 
+    $appId = docker @compose ps --quiet app
+    Assert-Launcher ($LASTEXITCODE -eq 0 -and $appId) 'Could not identify the test app container.'
+    $hostConfig = docker inspect --format '{{json .HostConfig}}' $appId | ConvertFrom-Json
+    $mounts = docker inspect --format '{{json .Mounts}}' $appId | ConvertFrom-Json
+    $restricted = $LASTEXITCODE -eq 0 -and $hostConfig -and !$mounts -and !$hostConfig.Privileged -and
+        $hostConfig.CapDrop -contains 'ALL' -and $hostConfig.SecurityOpt -contains 'no-new-privileges:true'
+    Assert-Launcher $restricted 'The app must have no host mounts, dropped capabilities, and no privilege escalation.'
+    $binding = @($hostConfig.PortBindings.'8080/tcp')
+    Assert-Launcher ($binding.Count -eq 1 -and $binding[0].HostIp -eq '127.0.0.1') 'The app must publish only on loopback.'
+
+    $models = Invoke-RestMethod -Uri ($url + 'api/models') -UseBasicParsing -TimeoutSec 5
+    $request = @{
+        Uri = $url + 'api/generate/local'
+        Method = 'Post'
+        ContentType = 'application/json'
+        Body = @{ model = @($models)[0].model; prompt = 'Fixture only' } | ConvertTo-Json
+        UseBasicParsing = $true
+        TimeoutSec = 10
+    }
+    try {
+        Microsoft.PowerShell.Utility\Invoke-RestMethod @request | Out-Null
+        throw 'The local endpoint unexpectedly reached Ollama.'
+    } catch {
+        if ($_.Exception.Response.StatusCode -ne 503) { throw }
+    }
+
     & $launcher Start
     Assert-Launcher ($LASTEXITCODE -eq 0 -and $browserOpens.Count -eq 2) 'Second start did not succeed.'
     $restarted = @(docker @compose ps --quiet app db | Sort-Object)

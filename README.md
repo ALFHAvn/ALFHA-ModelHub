@@ -552,8 +552,11 @@ For hot reload, keep the backend on port 8080, install Node.js 22.12 or
 newer, and run `npm ci` and `npm run dev` from `web`. The Vite UI is at
 [http://127.0.0.1:5173/](http://127.0.0.1:5173/) and proxies its API calls to
 the backend on loopback. Use Ctrl+C to stop Vite. Run `npm test` and
-`npm run build` from `web` to verify frontend changes. For a host backend,
-set `SERVER_ADDRESS=127.0.0.1` and `SERVER_PORT=8080` before starting Spring Boot.
+`npm run build` from `web` to verify frontend changes. A directly launched
+Spring Boot backend defaults to `127.0.0.1:8080`.
+
+Local clients can use the [ModelHub local generation integration contract](docs/local-generation-integration.md)
+for explicit model selection or opt-in routing.
 
 To verify the Windows launcher, run the following from the repository root.
 It starts a disposable Compose project on port 18080 and captures the browser
