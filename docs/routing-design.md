@@ -452,10 +452,13 @@ reason matched Preview. The API recorded 12,065 ms, and the response and
 execution metadata matched the saved history entry.
 
 PostgreSQL holds the three reports, and the active local configuration
-references their IDs. Exact API responses and verification metadata are
-archived locally under `target/routing-live-20261111T162245Z`. The evaluation
-repeats the same 10 tasks on one host. The benchmark can run both models
-concurrently for a task, so its latencies describe this paired workload.
+references their IDs. The checked-in archive contains the three original
+report responses, the preview and dispatch, and their verification manifest.
+The local collection directory also holds the broader execution history
+exports used to check those reports. The evaluation repeats the same 10
+tasks on one host. The benchmark can run both models concurrently for a task,
+so its latencies describe this paired workload.
+[Live evidence manifest](../benchmarks/evidence/local-routing-2026-11-11/verified.json)
 
 After collection and dispatch, Maven verification passed all 63 backend
 tests, including the PostgreSQL and restricted grading integration tests.

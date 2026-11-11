@@ -1,0 +1,95 @@
+{
+  "report_ids": [
+    "e5d83ad7-5107-4423-b665-13fef3f19fd8",
+    "56d7b6c7-197f-4e3c-a24d-cd256e649fc4",
+    "47ece7be-de4c-430b-86bd-41d976f9605c"
+  ],
+  "cutoff": "2026-11-11T16:21:28Z",
+  "dataset_sha256": "25e3bdbecce5b8e41b3e8acf4f896de3226940ac7bb981def7801a622bafe2c1",
+  "distinct_executions": 60,
+  "runtime": {
+    "version": "0.40.16",
+    "models": {
+      "qwen3:4b": "359d7dd4bcdab3d86b87d73ac27966f4dbb9f5efdfcc75d34a8764a09474fae7",
+      "qwen2.5-coder:3b-instruct-q4_K_M": "f72c60cabf6237b07f6e632b2c48d533cef25eda2efbd34bed21c5e9c01e6225"
+    }
+  },
+  "model_configuration": [
+    {
+      "model": "qwen3:4b",
+      "provider": "ollama",
+      "timeout": "120s",
+      "inferenceSettings": "Provider defaults; non-streaming; sampling settings and model weights are not pinned"
+    },
+    {
+      "model": "qwen2.5-coder:3b-instruct-q4_K_M",
+      "provider": "ollama",
+      "timeout": "120s",
+      "inferenceSettings": "Provider defaults; non-streaming; sampling settings and model weights are not pinned"
+    }
+  ],
+  "reports": [
+    {
+      "id": "e5d83ad7-5107-4423-b665-13fef3f19fd8",
+      "startedAt": "2026-11-11T16:22:46.234877816Z",
+      "completedAt": "2026-11-11T16:26:35.554660727Z",
+      "scores": {
+        "qwen3:4b": {
+          "PASS": 10
+        },
+        "qwen2.5-coder:3b-instruct-q4_K_M": {
+          "PASS": 5,
+          "FAIL": 5
+        }
+      }
+    },
+    {
+      "id": "56d7b6c7-197f-4e3c-a24d-cd256e649fc4",
+      "startedAt": "2026-11-11T16:26:35.707389609Z",
+      "completedAt": "2026-11-11T16:30:43.904929349Z",
+      "scores": {
+        "qwen3:4b": {
+          "PASS": 10
+        },
+        "qwen2.5-coder:3b-instruct-q4_K_M": {
+          "PASS": 5,
+          "FAIL": 5
+        }
+      }
+    },
+    {
+      "id": "47ece7be-de4c-430b-86bd-41d976f9605c",
+      "startedAt": "2026-11-11T16:30:43.993082583Z",
+      "completedAt": "2026-11-11T16:34:38.756472669Z",
+      "scores": {
+        "qwen3:4b": {
+          "PASS": 10
+        },
+        "qwen2.5-coder:3b-instruct-q4_K_M": {
+          "PASS": 5,
+          "FAIL": 5
+        }
+      }
+    }
+  ],
+  "aggregates": {
+    "qwen3:4b": {
+      "scores": {
+        "PASS": 30
+      },
+      "median_ms": 15051.5
+    },
+    "qwen2.5-coder:3b-instruct-q4_K_M": {
+      "scores": {
+        "PASS": 15,
+        "FAIL": 15
+      },
+      "median_ms": 8051.5
+    }
+  },
+  "sha256": {
+    "run-1.json": "ffc2bc7143180d5bff42a2c130d689413c71da0125006a1bf190678a69b9c2f2",
+    "run-2.json": "2b44bba58819f4c4a9b1a4a980141ac5db672f8accc5184c543a577ae36513d6",
+    "run-3.json": "3156b151bd30f9fa67b8c851f8c00f84a5dceb0badbf27ef4f89dffb4af0a0f1"
+  }
+}

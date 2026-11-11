@@ -7,7 +7,8 @@ models. It is independent of ALFHA Agent.
 
 - A Java 21 Spring Boot backend connects to Ollama and optional OpenRouter,
   runs generation and comparisons, and saves execution history in PostgreSQL.
-- The React web UI supports chat, comparison, and execution history.
+- The React web UI supports chat, comparison, execution history, Proposal &
+  Review, Coding Cohorts, and Routing Preview.
   [Windows startup guide](#local-web-ui-on-windows-11)
 - Versioned benchmarks cover 10 basic tasks, 24 software engineering tasks,
   and an opt-in Java coding pilot that runs submissions in restricted Docker
@@ -21,9 +22,9 @@ models. It is independent of ALFHA Agent.
 - A two-model workflow generates a proposal and then collects feedback from an
   explicitly selected reviewer. [Proposal and review](#two-model-proposal-and-review)
 
-The published Milestone 10 release is [v0.2.0](https://github.com/ALFHAvn/ALFHA-ModelHub/releases/tag/v0.2.0).
-The [v0.3.0 release draft](docs/v0.3.0-release-draft.md) covers the Milestone 11
-proposal-and-review workflow and its local evaluation.
+The [v0.4.0 release candidate notes](docs/v0.4.0-release-draft.md) describe
+the Windows launcher, browser workflows, and verified local-pair routing.
+The latest published release is [v0.3.0](https://github.com/ALFHAvn/ALFHA-ModelHub/releases/tag/v0.3.0).
 
 Docker Compose and GitHub Actions are included. The validation notes describe
 which behaviors have been exercised with live providers. [Validation](docs/validation.md)
@@ -96,7 +97,7 @@ mvn spring-boot:run
 Or run the packaged application after building:
 
 ```shell
-java -jar target/modelhub-0.3.0.jar
+java -jar target/modelhub-0.4.0.jar
 ```
 
 If you use the local Maven cache, include `"-Dmaven.repo.local=.m2/repository"`
@@ -106,7 +107,7 @@ The default port is 8080. Override it with `SERVER_PORT`, for example in PowerSh
 
 ```powershell
 $env:SERVER_PORT = '8081'
-java -jar target/modelhub-0.3.0.jar
+java -jar target/modelhub-0.4.0.jar
 ```
 
 ## Health API

@@ -1,0 +1,10 @@
+{
+  "requestId": "0ad19ded-53e0-4e46-b137-10861099dd79",
+  "model": "qwen3:4b",
+  "prompt": "What is 14 + 23? Reply with only the number.",
+  "response": "37",
+  "durationMs": 12065,
+  "status": "SUCCESS",
+  "error": null,
+  "timestamp": "2026-11-11T16:35:07.992522Z"
+}

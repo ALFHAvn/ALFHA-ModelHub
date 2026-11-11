@@ -11,7 +11,7 @@
     </parent>
     <groupId>vn.alfha</groupId>
     <artifactId>modelhub</artifactId>
-    <version>0.3.0</version>
+    <version>0.4.0</version>
     <name>ALFHA ModelHub</name>
     <description>Multi-model AI orchestration and evaluation backend</description>
     <properties>
